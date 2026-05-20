@@ -18,7 +18,7 @@
             overflow: hidden;
             display: flex;
             flex-direction: column;
-            justify-content: space-between;
+            justify-content: center;
             align-items: center;
         }
 
@@ -33,14 +33,8 @@
             -webkit-text-stroke: 0.5px #fff;
             filter: drop-shadow(0 0 2px #000);
             text-wrap: nowrap;
-            transition: 0.16s ease-in-out;
-            width: calc-size(fit-content, size);
-            height: calc-size(fit-content, size);
-        }
-
-        .focus {
-            color: gold;
-            scale: 1.1;
+            width: fit-content;
+            height: fit-content;
         }
 
         .container {
@@ -48,27 +42,136 @@
             display: flex;
             flex-direction: column;
             justify-content: center;
-            width: calc-size(fit-content, size);
-            height: calc-size(fit-content, size);
-            transition: all 1s ease;
+            align-items: center;
+            gap: 4px;
+            width: 100%;
+            max-width: 100vw;
+            height: fit-content;
+            box-sizing: border-box;
+            padding: 0 12px;
         }
 
-        .panel {
-            background-color: rgba(0, 0, 0, 0.4);
-        }
-
-        .no-pointer {
-            pointer-events: none;
-        }
-
-        .container > :last-child {
+        .container.dual-line > :last-child {
             align-self: flex-end;
         }
+
+        .lrc-line {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+            width: 100%;
+            max-width: 100%;
+            transition: opacity 0.2s ease, scale 0.16s ease-in-out;
+        }
+
+        .lrc-viewport {
+            width: 100%;
+            max-width: 100%;
+            overflow: hidden;
+            box-sizing: border-box;
+        }
+
+        .lrc-viewport .lrc {
+            width: fit-content;
+            min-width: 0;
+        }
+
+        .lrc-viewport.scroll-karaoke {
+            display: block;
+        }
+
+        .lrc-viewport.scroll-karaoke:not(.is-overflow) {
+            display: flex;
+            justify-content: center;
+        }
+
+        .lrc-viewport.scroll-karaoke.is-overflow .lrc {
+            transform: translateX(var(--scroll-x, 0px));
+            will-change: transform;
+        }
+
+        .lrc-viewport.fit-static {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .lrc-viewport.fit-static .lrc {
+            transform: scale(var(--fit-scale, 1));
+            transform-origin: center center;
+        }
+
+        .lrc-line.past {
+            opacity: 0.4;
+            scale: 0.85;
+        }
+
+        .lrc-line.current {
+            opacity: 1;
+            scale: 1.1;
+        }
+
+        .lrc-line.future {
+            opacity: 0.6;
+            scale: 0.92;
+        }
+
+        .lrc-line .lrc.focus {
+            color: gold;
+            scale: 1.1;
+        }
+
+        .lrc.romaji {
+            font-size: 0.65em;
+            font-weight: normal;
+            opacity: 0.55;
+            scale: 1;
+            -webkit-text-stroke: 0.3px #fff;
+        }
+
+        .lrc.romaji.focus {
+            opacity: 0.75;
+            scale: 1;
+        }
+
+        .lrc.romaji:empty {
+            display: none;
+        }
+
+        .lrc.translation {
+            font-weight: normal;
+            opacity: 0.85;
+            scale: 1;
+            -webkit-text-stroke: 0.35px #fff;
+        }
+
+        .lrc.translation:not(.focus) {
+            opacity: 0.65;
+        }
+
+        .lrc.translation:empty {
+            display: none;
+        }
+        .lrc.karaoke-line {
+            --lrc-current: gold;
+            --lrc-next: aquamarine;
+        }
+
+        .lrc .word {
+            display: inline-block;
+            will-change: opacity, transform, filter;
+            color: color-mix(
+                in srgb,
+                var(--lrc-next) calc((1 - var(--p, 0)) * 100%),
+                var(--lrc-current)
+            );
+            opacity: calc(0.36 + 0.64 * var(--p, 0));
+            transform: scale(calc(0.96 + 0.08 * var(--p, 0)));
+            filter: drop-shadow(0 0 calc(1px + 8px * var(--p, 0)) var(--lrc-current));
+        }
     </style>
-    <div class="container" id="container">
-        <div class="lrc" id="top"></div>
-        <div class="lrc" id="bottom"></div>
-    </div>
+    <div class="container" id="container"></div>
     <script src="./index.ts"></script>
 </body>
 </html>

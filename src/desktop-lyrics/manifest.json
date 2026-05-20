@@ -18,7 +18,20 @@
         "desktop-lyrics": {
             "openDevTools": false,
             "main": "./main.js",
-            "renderer": "./renderer/index.html"
+            "renderer": "./renderer/index.html",
+            "openOptions": {
+                "width": 720,
+                "height": 160,
+                "show": true,
+                "backgroundColor": "#99000000",
+                "alwaysOnTop": true,
+                "frame": false,
+                "transparent": true,
+                "maximizable": false,
+                "minimizable": false,
+                "skipTaskbar": true,
+                "resizable": false
+            }
         }
     }
 }

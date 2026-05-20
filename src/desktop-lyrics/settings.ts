@@ -1,24 +1,37 @@
-import { fromObject } from 'extension/ui/index'
-
-const defaultSettings = {
-    colorCurrent: 'gold',
-    colorNext: 'aquamarine',
-    fontSize: 'x-large',
-    lock: false,
-}
-
-const i18nZhCN = {
-    colorCurrent: '正在播放的歌词颜色',
-    colorNext: '未播放的歌词颜色',
-    fontSize: '歌词字体大小',
-    lock: '歌词锁定',
-}
-
-export const onSetting: UIExports.OnSetting = async settings =>
-    fromObject(await settings.get(defaultSettings), i18nZhCN)
-
-export const onSetSetting: UIExports.OnSetSetting = async (store, name, value) =>
-    store.set({ ...await store.get(defaultSettings), [name]: value })
-
-export const onGetSetting: UIExports.OnGetSetting = async (store, name) =>
-    (await store.get(defaultSettings))[name]
+import { fromObject, TextField } from 'extension/ui/index'
+import { defaultSettings, i18nZhCN, normalizeVisibleLines, readSettings } from './settings-defaults'
+
+export { defaultSettings }
+
+export const onSetting: UIExports.OnSetting = async store => {
+    const data = await readSettings(store)
+    const { visibleLines, ...rest } = data
+
+    return [
+        ...fromObject(rest, i18nZhCN),
+        TextField(
+            i18nZhCN.visibleLines,
+            String(visibleLines),
+            'visibleLines',
+        ),
+    ]
+}
+
+export const onSetSetting: UIExports.OnSetSetting = async (store, name, value) => {
+    const next = name === 'visibleLines'
+        ? normalizeVisibleLines(value)
+        : value
+
+    return store.set({ ...await readSettings(store), [name]: next })
+}
+
+export const onGetSetting: UIExports.OnGetSetting = async (store, name) => {
+    const data = await readSettings(store)
+
+    if (name === 'visibleLines') {
+        return String(data.visibleLines)
+    }
+
+    return data[name as keyof typeof defaultSettings]
+}
+

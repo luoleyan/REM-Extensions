@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline';">
+    <title>lyrics</title>
+</head>
+<body>
+    <style>body {
+            -webkit-app-region: drag;
+            box-sizing: border-box;
+            width: 100vw;
+            height: 100vh;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        body.unlock {
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+
+        .lrc {
+            color: aquamarine;
+            font-weight: normal;
+            font-size: 24px;
+            -webkit-text-stroke: 0.5px #fff;
+            filter: drop-shadow(0 0 2px #000);
+            text-wrap: nowrap;
+            transition: 0.16s ease-in-out;
+            width: calc-size(fit-content, size);
+            height: calc-size(fit-content, size);
+        }
+
+        .focus {
+            color: gold;
+            scale: 1.1;
+        }
+
+        .container {
+            user-select: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            width: calc-size(fit-content, size);
+            height: calc-size(fit-content, size);
+            transition: all 1s ease;
+        }
+
+        .panel {
+            background-color: rgba(0, 0, 0, 0.4);
+        }
+
+        .no-pointer {
+            pointer-events: none;
+        }
+
+        .container > :last-child {
+            align-self: flex-end;
+        }</style>
+    <div class="container" id="container">
+        <div class="lrc" id="top"></div>
+        <div class="lrc" id="bottom"></div>
+    </div>
+    <script src="renderer.77de5100.js"></script>
+</body>
+</html>
