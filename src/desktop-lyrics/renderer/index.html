@@ -65,6 +65,18 @@
             transition: opacity 0.2s ease, scale 0.16s ease-in-out;
         }
 
+        .lrc.romaji {
+            order: 1;
+        }
+
+        .lrc:not(.romaji):not(.translation) {
+            order: 2;
+        }
+
+        .lrc.translation {
+            order: 3;
+        }
+
         .lrc-viewport {
             width: 100%;
             max-width: 100%;

@@ -163,8 +163,10 @@ async function loadLyrics() {
     }
 }
 
-const LINE_SWITCH_EARLY_MS = 200
+const LINE_SWITCH_EARLY_MS = 220
+const LRC_LINE_SWITCH_EARLY_MS = 140
 const SEEK_POLL_INTERVAL_MS = 100
+const AUX_SYNC_WINDOW_MS = 3200
 
 function getLineIndex(lrcArr: Lyric[], time: number, earlyMs = 0): [ number, number? ] {
     const lrclen = lrcArr.length
@@ -206,13 +208,13 @@ function closestLrcIndex(targetTime: number): number {
 function getActiveLineIndex(time: number, s: DesktopLyricsSettings): [ number, number? ] {
     if (s.karaokeMode && klyric?.length) {
         return getLineIndex(
-            klyric.map(line => ({ time: line.time, lyric: '' })),
+            klyric.map(line => ({ time: karaokeLineStart(line), lyric: '' })),
             time,
             LINE_SWITCH_EARLY_MS,
         )
     }
 
-    return getLineIndex(lrc!, time)
+    return getLineIndex(lrc!, time, LRC_LINE_SWITCH_EARLY_MS)
 }
 
 function resolveLrcIndex(lineIndex: number, s: DesktopLyricsSettings): number {
@@ -221,15 +223,64 @@ function resolveLrcIndex(lineIndex: number, s: DesktopLyricsSettings): number {
     }
 
     if (s.karaokeMode && klyric?.[lineIndex]) {
-        return closestLrcIndex(klyric[lineIndex].time)
+        return closestLrcIndex(karaokeLineStart(klyric[lineIndex]))
     }
 
     return Math.min(lineIndex, lrc.length - 1)
 }
 
+function lineStartTime(lineIndex: number, lrcIndex: number, s: DesktopLyricsSettings): number {
+    if (s.karaokeMode && klyric?.[lineIndex]) {
+        return karaokeLineStart(klyric[lineIndex])
+    }
+
+    return lrc?.[lrcIndex]?.time ?? 0
+}
+
+function closestLyricIndexByTime(arr: Lyric[] | null, targetTime: number, fallbackIdx: number): number {
+    if (!arr?.length) {
+        return -1
+    }
+
+    let best = Math.max(0, Math.min(fallbackIdx, arr.length - 1))
+    let bestDiff = Math.abs(arr[best].time - targetTime)
+
+    for (let i = 0; i < arr.length; i++) {
+        const diff = Math.abs(arr[i].time - targetTime)
+        if (diff < bestDiff) {
+            bestDiff = diff
+            best = i
+        }
+    }
+
+    return bestDiff <= AUX_SYNC_WINDOW_MS ? best : -1
+}
+
+function lyricAtTime(arr: Lyric[] | null, targetTime: number, fallbackIdx: number): string {
+    const idx = closestLyricIndexByTime(arr, targetTime, fallbackIdx)
+    if (idx < 0) {
+        return ''
+    }
+
+    return arr[idx]?.lyric.trim() ?? ''
+}
+
 function parseLrc(lrcstr: string | undefined): Lyric[] | null {
     if (!lrcstr) {
         return null
+    }
+
+    const fractionToMs = (fraction: string) => {
+        if (!fraction) return 0
+        const digits = fraction.replace(/[^\d]/g, '')
+        if (!digits) return 0
+
+        // LRC has mixed precision in the wild: .x / .xx / .xxx
+        // Convert by precision instead of assuming centiseconds only.
+        if (digits.length === 1) return Number(digits) * 100
+        if (digits.length === 2) return Number(digits) * 10
+        if (digits.length === 3) return Number(digits)
+        return Number(digits.slice(0, 3))
     }
 
     return lrcstr.split('\n').map(
@@ -242,9 +293,9 @@ function parseLrc(lrcstr: string | undefined): Lyric[] | null {
                 }
             }
 
-            const [ _, min, sec, cs ] = /(\d+):(\d+)\.(\d+)/g.exec(time.slice(1)) as string[]
+            const [ _, min, sec, frac ] = /(\d+):(\d+)\.(\d+)/g.exec(time.slice(1)) as string[]
             return {
-                time: Number(min) * 60 * 1000 + Number(sec) * 1000 + Number(cs) * 10,
+                time: Number(min) * 60 * 1000 + Number(sec) * 1000 + fractionToMs(frac),
                 lyric
             }
         }
@@ -278,12 +329,16 @@ function parseYrc(yrcStr: string | undefined): KaraokeLine[] | null {
             })
         }
 
+        const durationScale = inferDurationScale(words)
         for (let i = 0; i < words.length; i++) {
             const gapToNext = i < words.length - 1
                 ? words[i + 1].start - words[i].start
                 : Math.max(words[i].duration, 280)
 
-            words[i].duration = normalizeWordDurationMs(words[i].duration, gapToNext)
+            words[i].duration = normalizeWordDurationMs(
+                words[i].duration * durationScale,
+                gapToNext,
+            )
         }
 
         if (words.length > 0) {
@@ -294,21 +349,38 @@ function parseYrc(yrcStr: string | undefined): KaraokeLine[] | null {
     return result.length > 0 ? result : null
 }
 
-function normalizeWordDurationMs(raw: number, gapToNext: number) {
-    const asPlain = raw
-    const asCenti = raw * 10
-
-    if (gapToNext > 0) {
-        if (asPlain >= 20 && asPlain <= gapToNext * 1.25) {
-            return asPlain
-        }
-
-        if (asCenti >= 20 && asCenti <= gapToNext * 1.25) {
-            return asCenti
-        }
+function inferDurationScale(words: WordTiming[]) {
+    if (words.length < 2) {
+        return 1
     }
 
-    return asPlain <= 2500 ? asPlain : asCenti
+    let plainErr = 0
+    let centiErr = 0
+    let samples = 0
+
+    for (let i = 0; i < words.length - 1; i++) {
+        const gap = words[i + 1].start - words[i].start
+        if (!Number.isFinite(gap) || gap <= 0) {
+            continue
+        }
+
+        samples++
+        plainErr += Math.abs(words[i].duration - gap)
+        centiErr += Math.abs(words[i].duration * 10 - gap)
+    }
+
+    if (!samples) {
+        return 1
+    }
+
+    return centiErr < plainErr * 0.92 ? 10 : 1
+}
+
+function normalizeWordDurationMs(raw: number, gapToNext: number) {
+    const asPlain = raw
+    const floor = 36
+    const ceil = Math.max(floor + 1, gapToNext > 0 ? gapToNext * 1.2 : 1800)
+    return Math.max(floor, Math.min(asPlain, ceil))
 }
 
 interface KaraokeWordMeta {
@@ -592,6 +664,10 @@ function lyricAt(arr: Lyric[] | null, index: number): string {
     return arr?.[index]?.lyric.trim() ?? ''
 }
 
+function karaokeLineStart(line: KaraokeLine): number {
+    return line.words?.[0]?.start ?? line.time
+}
+
 function findKaraokeLineAtTime(now: number): KaraokeLine | null {
     if (!klyric?.length) {
         return null
@@ -601,20 +677,21 @@ function findKaraokeLineAtTime(now: number): KaraokeLine | null {
 
     for (let i = 0; i < klyric.length; i++) {
         const line = klyric[i]
+        const lineStart = karaokeLineStart(line)
         const nextTime = i < klyric.length - 1
-            ? klyric[i + 1].time
+            ? karaokeLineStart(klyric[i + 1])
             : line.time + Math.max(line.duration, 400)
 
-        if (windowStart >= line.time && now < nextTime) {
+        if (windowStart >= lineStart && now < nextTime) {
             return line
         }
     }
 
     let best = klyric[0]
-    let bestDiff = Math.abs(best.time - now)
+    let bestDiff = Math.abs(karaokeLineStart(best) - now)
 
     for (const line of klyric) {
-        const diff = Math.abs(line.time - now)
+        const diff = Math.abs(karaokeLineStart(line) - now)
         if (diff < bestDiff) {
             bestDiff = diff
             best = line
@@ -736,17 +813,18 @@ function fillRomajiAndTranslation(
     refs: LyricLineRefs,
     s: DesktopLyricsSettings,
     lyricIdx: number,
+    lineTime: number,
     focused: boolean,
 ) {
     if (s.showRomaji) {
-        refs.roma.innerText = lyricAt(romalrc, lyricIdx)
+        refs.roma.innerText = lyricAtTime(romalrc, lineTime, lyricIdx)
         applyRomajiStyle(refs.roma, focused)
     } else {
         refs.roma.innerText = ''
     }
 
     if (s.showTranslation) {
-        refs.trans.innerText = lyricAt(tlyric, lyricIdx)
+        refs.trans.innerText = lyricAtTime(tlyric, lineTime, lyricIdx)
         applyTranslationStyle(refs.trans, s.colorTranslation, s.fontSizeTranslation, focused)
     } else {
         refs.trans.innerText = ''
@@ -803,10 +881,15 @@ function renderDualLine(s: DesktopLyricsSettings, l1: number, time: number, l2?:
         refs.text.style.fontSize = s.fontSize
     }
 
+    const currentLrcIndex = resolveLrcIndex(l1, s)
+    const currentLineTime = lineStartTime(l1, currentLrcIndex, s)
+    const nextLrcIndex = resolveLrcIndex(l2 ?? l1, s)
+    const nextLineTime = lineStartTime(l2 ?? l1, nextLrcIndex, s)
+
     const currentIsKaraoke = renderMainLyricText(
         current.textViewport,
         current.text,
-        resolveLrcIndex(l1, s),
+        currentLrcIndex,
         time,
         s,
     )
@@ -816,12 +899,12 @@ function renderDualLine(s: DesktopLyricsSettings, l1: number, time: number, l2?:
 
     next.text.classList.remove('karaoke-line')
     karaokeDomCache.delete(next.text)
-    next.text.innerText = l2 !== undefined ? lrc![resolveLrcIndex(l2, s)].lyric : ' '
+    next.text.innerText = l2 !== undefined ? lrc![nextLrcIndex].lyric : ' '
     next.text.style.color = s.colorNext
     fitStaticLyricInViewport(next.textViewport, next.text)
 
-    fillRomajiAndTranslation(current, s, resolveLrcIndex(l1, s), true)
-    fillRomajiAndTranslation(next, s, resolveLrcIndex(l2 ?? l1, s), false)
+    fillRomajiAndTranslation(current, s, currentLrcIndex, currentLineTime, true)
+    fillRomajiAndTranslation(next, s, nextLrcIndex, nextLineTime, false)
     layoutAuxiliaryLyrics(current)
     layoutAuxiliaryLyrics(next)
 }
@@ -848,6 +931,7 @@ function renderMultiLine(s: DesktopLyricsSettings, l1: number, time: number) {
         refs.text.style.fontSize = s.fontSize
 
         const lrcIndex = resolveLrcIndex(lyricIdx, s)
+        const lineTime = lineStartTime(lyricIdx, lrcIndex, s)
         const isKaraoke = lyricIdx === l1
             && renderMainLyricText(refs.textViewport, refs.text, lrcIndex, time, s)
 
@@ -875,7 +959,7 @@ function renderMultiLine(s: DesktopLyricsSettings, l1: number, time: number) {
             }
         }
 
-        fillRomajiAndTranslation(refs, s, lrcIndex, lyricIdx === l1)
+        fillRomajiAndTranslation(refs, s, lrcIndex, lineTime, lyricIdx === l1)
         layoutAuxiliaryLyrics(refs)
     }
 }
