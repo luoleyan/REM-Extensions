@@ -40,6 +40,10 @@ interface DesktopLyricsSettings {
     bgColorUnlocked: string
     bgBlurEnabled: boolean
     bgBlurRadius: number
+    strokeWidth: number
+    strokeColor: string
+    shadowBlur: number
+    shadowColor: string
 }
 
 interface LyricLineRefs {
@@ -72,6 +76,10 @@ const defaultSettingsLocal: DesktopLyricsSettings = {
     bgColorUnlocked: 'rgba(0,0,0,0.5)',
     bgBlurEnabled: false,
     bgBlurRadius: 8,
+    strokeWidth: 0.5,
+    strokeColor: '#ffffff',
+    shadowBlur: 2,
+    shadowColor: 'rgba(0,0,0,0.8)',
 }
 
 let cachedSettings: DesktopLyricsSettings = { ...defaultSettingsLocal }
@@ -112,6 +120,38 @@ function normalizeBlurRadius(value: unknown): number {
     return Math.max(0, Math.min(48, Math.round(raw)))
 }
 
+function normalizeStrokeWidth(value: unknown): number {
+    const raw = typeof value === 'number'
+        ? value
+        : typeof value === 'string'
+            ? Number(value)
+            : typeof value === 'object' && value !== null && 'value' in value
+                ? Number((value as { value: number }).value)
+                : 0.5
+
+    if (!Number.isFinite(raw)) {
+        return 0.5
+    }
+
+    return Math.max(0, Math.min(5, raw))
+}
+
+function normalizeShadowBlur(value: unknown): number {
+    const raw = typeof value === 'number'
+        ? value
+        : typeof value === 'string'
+            ? Number(value)
+            : typeof value === 'object' && value !== null && 'value' in value
+                ? Number((value as { value: number }).value)
+                : 2
+
+    if (!Number.isFinite(raw)) {
+        return 2
+    }
+
+    return Math.max(0, Math.min(20, raw))
+}
+
 function parseSettingsResponse(raw: unknown): DesktopLyricsSettings {
     const base = { ...defaultSettingsLocal }
     let obj: Record<string, unknown> | null = null
@@ -131,6 +171,8 @@ function parseSettingsResponse(raw: unknown): DesktopLyricsSettings {
         ...(obj as object),
         visibleLines: normalizeVisibleLines(obj.visibleLines),
         bgBlurRadius: normalizeBlurRadius(obj.bgBlurRadius),
+        strokeWidth: normalizeStrokeWidth(obj.strokeWidth),
+        shadowBlur: normalizeShadowBlur(obj.shadowBlur),
     }
 }
 
@@ -866,6 +908,13 @@ function applyBackgroundStyle(s: DesktopLyricsSettings) {
     }
 }
 
+function applyTextEffects(s: DesktopLyricsSettings) {
+    document.body.style.setProperty('--stroke-width', `${s.strokeWidth}px`)
+    document.body.style.setProperty('--stroke-color', s.strokeColor)
+    document.body.style.setProperty('--shadow-blur', `${s.shadowBlur}px`)
+    document.body.style.setProperty('--shadow-color', s.shadowColor)
+}
+
 function applyTranslationStyle(el: HTMLDivElement, color: string, fontSize: string, focused: boolean) {
     el.style.color = color
     el.style.fontSize = fontSize
@@ -1132,6 +1181,7 @@ async function renderLines(time: number) {
     const s = cachedSettings
     const visibleLines = normalizeVisibleLines(s.visibleLines)
     applyBackgroundStyle(s)
+    applyTextEffects(s)
 
     ensureDOM(visibleLines)
 
@@ -1172,6 +1222,7 @@ const EXTENSION_ID = '23dc60b0-4621-4ab3-92f7-50baf8b6ec1a'
 function applyLockFromSettings(s: DesktopLyricsSettings) {
     setLock(s.lock)
     applyBackgroundStyle(s)
+    applyTextEffects(s)
 }
 
 subscribe('player', loadLyrics)

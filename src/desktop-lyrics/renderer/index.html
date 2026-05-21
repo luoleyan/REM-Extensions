@@ -29,8 +29,11 @@
             color: aquamarine;
             font-weight: normal;
             font-size: 24px;
-            -webkit-text-stroke: 0.5px #fff;
-            filter: drop-shadow(0 0 2px #000);
+            -webkit-text-stroke-width: var(--stroke-width, 0.5px);
+            -webkit-text-stroke-color: var(--stroke-color, #fff);
+            filter: drop-shadow(
+                0 0 var(--shadow-blur, 2px) var(--shadow-color, rgba(0, 0, 0, 0.8))
+            );
             text-wrap: nowrap;
             width: fit-content;
             height: fit-content;

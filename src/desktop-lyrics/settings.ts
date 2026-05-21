@@ -4,6 +4,8 @@ import {
     i18nZhCN,
     normalizeVisibleLines,
     normalizeBlurRadius,
+    normalizeStrokeWidth,
+    normalizeShadowBlur,
     readSettings
 } from './settings-defaults'
 
@@ -17,6 +19,10 @@ export const onSetting: UIExports.OnSetting = async store => {
         bgBlurRadius,
         bgColorLocked,
         bgColorUnlocked,
+        strokeWidth,
+        strokeColor,
+        shadowBlur,
+        shadowColor,
         ...rest
     } = data
 
@@ -36,6 +42,30 @@ export const onSetting: UIExports.OnSetting = async store => {
             i18nZhCN.bgColorUnlocked,
             String(bgColorUnlocked),
             'bgColorUnlocked',
+        ),
+        NumberField(
+            i18nZhCN.strokeWidth,
+            Number(strokeWidth),
+            0,
+            5,
+            'strokeWidth',
+        ),
+        TextField(
+            i18nZhCN.strokeColor,
+            String(strokeColor),
+            'strokeColor',
+        ),
+        NumberField(
+            i18nZhCN.shadowBlur,
+            Number(shadowBlur),
+            0,
+            20,
+            'shadowBlur',
+        ),
+        TextField(
+            i18nZhCN.shadowColor,
+            String(shadowColor),
+            'shadowColor',
         ),
         NumberField(
             i18nZhCN.bgBlurRadius,
@@ -59,6 +89,10 @@ export const onSetSetting: UIExports.OnSetSetting = async (store, name, value) =
         ? normalizeVisibleLines(value)
         : name === 'bgBlurRadius'
             ? normalizeBlurRadius(value)
+            : name === 'strokeWidth'
+                ? normalizeStrokeWidth(value)
+                : name === 'shadowBlur'
+                    ? normalizeShadowBlur(value)
             : value
 
     return store.set({ ...await readSettings(store), [name]: next })
@@ -72,6 +106,12 @@ export const onGetSetting: UIExports.OnGetSetting = async (store, name) => {
     }
     if (name === 'bgBlurRadius') {
         return String(data.bgBlurRadius)
+    }
+    if (name === 'strokeWidth') {
+        return String(data.strokeWidth)
+    }
+    if (name === 'shadowBlur') {
+        return String(data.shadowBlur)
     }
 
     return data[name as keyof typeof defaultSettings]

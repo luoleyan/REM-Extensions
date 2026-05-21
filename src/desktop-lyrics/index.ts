@@ -5,6 +5,10 @@ const VISIBLE_LINES_MIN = 2
 const VISIBLE_LINES_MAX = 9
 const BG_BLUR_MIN = 0
 const BG_BLUR_MAX = 48
+const STROKE_WIDTH_MIN = 0
+const STROKE_WIDTH_MAX = 5
+const SHADOW_BLUR_MIN = 0
+const SHADOW_BLUR_MAX = 20
 
 function normalizeVisibleLines(value: unknown): number {
     const raw = typeof value === 'number'
@@ -40,6 +44,38 @@ function normalizeBlurRadius(value: unknown): number {
     return Math.min(BG_BLUR_MAX, Math.max(BG_BLUR_MIN, rounded))
 }
 
+function normalizeStrokeWidth(value: unknown): number {
+    const raw = typeof value === 'number'
+        ? value
+        : typeof value === 'string'
+            ? Number(value)
+            : typeof value === 'object' && value !== null && 'value' in value
+                ? Number((value as { value: number }).value)
+                : 0.5
+
+    if (!Number.isFinite(raw)) {
+        return 0.5
+    }
+
+    return Math.min(STROKE_WIDTH_MAX, Math.max(STROKE_WIDTH_MIN, raw))
+}
+
+function normalizeShadowBlur(value: unknown): number {
+    const raw = typeof value === 'number'
+        ? value
+        : typeof value === 'string'
+            ? Number(value)
+            : typeof value === 'object' && value !== null && 'value' in value
+                ? Number((value as { value: number }).value)
+                : 2
+
+    if (!Number.isFinite(raw)) {
+        return 2
+    }
+
+    return Math.min(SHADOW_BLUR_MAX, Math.max(SHADOW_BLUR_MIN, raw))
+}
+
 const defaultSettings = {
     colorCurrent: 'gold',
     colorNext: 'aquamarine',
@@ -55,6 +91,10 @@ const defaultSettings = {
     bgColorUnlocked: 'rgba(0,0,0,0.5)',
     bgBlurEnabled: false,
     bgBlurRadius: 8,
+    strokeWidth: 0.5,
+    strokeColor: '#ffffff',
+    shadowBlur: 2,
+    shadowColor: 'rgba(0,0,0,0.8)',
 }
 
 async function readExtensionSettings() {
@@ -68,6 +108,8 @@ async function readExtensionSettings() {
         ...parsed,
         visibleLines: normalizeVisibleLines(parsed.visibleLines),
         bgBlurRadius: normalizeBlurRadius(parsed.bgBlurRadius),
+        strokeWidth: normalizeStrokeWidth(parsed.strokeWidth),
+        shadowBlur: normalizeShadowBlur(parsed.shadowBlur),
     }
 }
 

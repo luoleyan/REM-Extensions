@@ -16,6 +16,10 @@ export const defaultSettings = {
     bgColorUnlocked: 'rgba(0,0,0,0.5)',
     bgBlurEnabled: false,
     bgBlurRadius: 8,
+    strokeWidth: 0.5,
+    strokeColor: '#ffffff',
+    shadowBlur: 2,
+    shadowColor: 'rgba(0,0,0,0.8)',
 }
 
 export const i18nZhCN = {
@@ -33,6 +37,10 @@ export const i18nZhCN = {
     bgColorUnlocked: '解锁时背景色',
     bgBlurEnabled: '启用毛玻璃',
     bgBlurRadius: '毛玻璃强度(px)',
+    strokeWidth: '文字描边粗细(px)',
+    strokeColor: '描边颜色',
+    shadowBlur: '阴影强度(px)',
+    shadowColor: '阴影颜色',
 }
 
 export function normalizeBlurRadius(value: unknown): number {
@@ -50,6 +58,38 @@ export function normalizeBlurRadius(value: unknown): number {
 
     const rounded = Math.round(raw)
     return Math.max(0, Math.min(48, rounded))
+}
+
+export function normalizeStrokeWidth(value: unknown): number {
+    const raw = typeof value === 'number'
+        ? value
+        : typeof value === 'string'
+            ? Number(value)
+            : typeof value === 'object' && value !== null && 'value' in value
+                ? Number((value as { value: number }).value)
+                : 0.5
+
+    if (!Number.isFinite(raw)) {
+        return 0.5
+    }
+
+    return Math.max(0, Math.min(5, raw))
+}
+
+export function normalizeShadowBlur(value: unknown): number {
+    const raw = typeof value === 'number'
+        ? value
+        : typeof value === 'string'
+            ? Number(value)
+            : typeof value === 'object' && value !== null && 'value' in value
+                ? Number((value as { value: number }).value)
+                : 2
+
+    if (!Number.isFinite(raw)) {
+        return 2
+    }
+
+    return Math.max(0, Math.min(20, raw))
 }
 
 export function normalizeVisibleLines(value: unknown): number {
@@ -77,5 +117,7 @@ export async function readSettings(store: { get: (v?: unknown) => Promise<unknow
         ...merged,
         visibleLines: normalizeVisibleLines(merged.visibleLines),
         bgBlurRadius: normalizeBlurRadius(merged.bgBlurRadius),
+        strokeWidth: normalizeStrokeWidth(merged.strokeWidth),
+        shadowBlur: normalizeShadowBlur(merged.shadowBlur),
     }
 }
