@@ -9,6 +9,10 @@ const STROKE_WIDTH_MIN = 0
 const STROKE_WIDTH_MAX = 5
 const SHADOW_BLUR_MIN = 0
 const SHADOW_BLUR_MAX = 20
+const WINDOW_WIDTH_MIN = 320
+const WINDOW_WIDTH_MAX = 1920
+const WINDOW_HEIGHT_MIN = 60
+const WINDOW_HEIGHT_MAX = 600
 const TEXT_ALIGN_LEFT = 'left'
 const TEXT_ALIGN_CENTER = 'center'
 const TEXT_ALIGN_RIGHT = 'right'
@@ -87,6 +91,40 @@ function normalizeTextAlign(value: unknown): string {
     return TEXT_ALIGN_CENTER
 }
 
+function normalizeWindowWidth(value: unknown): number {
+    const raw = typeof value === 'number'
+        ? value
+        : typeof value === 'string'
+            ? Number(value)
+            : typeof value === 'object' && value !== null && 'value' in value
+                ? Number((value as { value: number }).value)
+                : 720
+
+    if (!Number.isFinite(raw)) {
+        return 720
+    }
+
+    const rounded = Math.round(raw)
+    return Math.min(WINDOW_WIDTH_MAX, Math.max(WINDOW_WIDTH_MIN, rounded))
+}
+
+function normalizeWindowHeight(value: unknown): number {
+    const raw = typeof value === 'number'
+        ? value
+        : typeof value === 'string'
+            ? Number(value)
+            : typeof value === 'object' && value !== null && 'value' in value
+                ? Number((value as { value: number }).value)
+                : 120
+
+    if (!Number.isFinite(raw)) {
+        return 120
+    }
+
+    const rounded = Math.round(raw)
+    return Math.min(WINDOW_HEIGHT_MAX, Math.max(WINDOW_HEIGHT_MIN, rounded))
+}
+
 const defaultSettings = {
     colorCurrent: 'gold',
     colorNext: 'aquamarine',
@@ -107,6 +145,8 @@ const defaultSettings = {
     shadowBlur: 2,
     shadowColor: 'rgba(0,0,0,0.8)',
     textAlign: 'center',
+    windowWidth: 720,
+    windowHeight: 120,
 }
 
 async function readExtensionSettings() {
@@ -123,6 +163,8 @@ async function readExtensionSettings() {
         strokeWidth: normalizeStrokeWidth(parsed.strokeWidth),
         shadowBlur: normalizeShadowBlur(parsed.shadowBlur),
         textAlign: normalizeTextAlign(parsed.textAlign),
+        windowWidth: normalizeWindowWidth(parsed.windowWidth),
+        windowHeight: normalizeWindowHeight(parsed.windowHeight),
     }
 }
 

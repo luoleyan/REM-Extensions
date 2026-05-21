@@ -7,6 +7,8 @@ import {
     normalizeStrokeWidth,
     normalizeShadowBlur,
     normalizeTextAlign,
+    normalizeWindowWidth,
+    normalizeWindowHeight,
     readSettings
 } from './settings-defaults'
 
@@ -25,6 +27,8 @@ export const onSetting: UIExports.OnSetting = async store => {
         shadowBlur,
         shadowColor,
         textAlign,
+        windowWidth,
+        windowHeight,
         ...rest
     } = data
 
@@ -88,6 +92,20 @@ export const onSetting: UIExports.OnSetting = async store => {
             9,
             'visibleLines',
         ),
+        NumberField(
+            i18nZhCN.windowWidth,
+            Number(windowWidth),
+            320,
+            1920,
+            'windowWidth',
+        ),
+        NumberField(
+            i18nZhCN.windowHeight,
+            Number(windowHeight),
+            60,
+            600,
+            'windowHeight',
+        ),
     ]
 }
 
@@ -102,6 +120,10 @@ export const onSetSetting: UIExports.OnSetSetting = async (store, name, value) =
                     ? normalizeShadowBlur(value)
                     : name === 'textAlign'
                         ? normalizeTextAlign(value)
+                        : name === 'windowWidth'
+                            ? normalizeWindowWidth(value)
+                            : name === 'windowHeight'
+                                ? normalizeWindowHeight(value)
                         : value
 
     return store.set({ ...await readSettings(store), [name]: next })
@@ -121,6 +143,12 @@ export const onGetSetting: UIExports.OnGetSetting = async (store, name) => {
     }
     if (name === 'shadowBlur') {
         return String(data.shadowBlur)
+    }
+    if (name === 'windowWidth') {
+        return String(data.windowWidth)
+    }
+    if (name === 'windowHeight') {
+        return String(data.windowHeight)
     }
 
     return data[name as keyof typeof defaultSettings]

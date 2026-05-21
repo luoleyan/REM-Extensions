@@ -7,6 +7,12 @@ const settingsConn = connect('settings')
 
 const VISIBLE_LINES_MIN = 2
 const VISIBLE_LINES_MAX = 9
+const WINDOW_WIDTH_MIN = 320
+const WINDOW_WIDTH_MAX = 1920
+const WINDOW_HEIGHT_MIN = 60
+const WINDOW_HEIGHT_MAX = 600
+const WINDOW_WIDTH_DEFAULT = 720
+const WINDOW_HEIGHT_DEFAULT = 120
 
 interface Lyric {
     time: number
@@ -45,6 +51,8 @@ interface DesktopLyricsSettings {
     shadowBlur: number
     shadowColor: string
     textAlign: string
+    windowWidth: number
+    windowHeight: number
 }
 
 interface LyricLineRefs {
@@ -82,6 +90,8 @@ const defaultSettingsLocal: DesktopLyricsSettings = {
     shadowBlur: 2,
     shadowColor: 'rgba(0,0,0,0.8)',
     textAlign: 'center',
+    windowWidth: WINDOW_WIDTH_DEFAULT,
+    windowHeight: WINDOW_HEIGHT_DEFAULT,
 }
 
 let cachedSettings: DesktopLyricsSettings = { ...defaultSettingsLocal }
@@ -162,6 +172,40 @@ function normalizeTextAlign(value: unknown): string {
     return 'center'
 }
 
+function normalizeWindowWidth(value: unknown): number {
+    const raw = typeof value === 'number'
+        ? value
+        : typeof value === 'string'
+            ? Number(value)
+            : typeof value === 'object' && value !== null && 'value' in value
+                ? Number((value as { value: number }).value)
+                : WINDOW_WIDTH_DEFAULT
+
+    if (!Number.isFinite(raw)) {
+        return WINDOW_WIDTH_DEFAULT
+    }
+
+    const rounded = Math.round(raw)
+    return Math.min(WINDOW_WIDTH_MAX, Math.max(WINDOW_WIDTH_MIN, rounded))
+}
+
+function normalizeWindowHeight(value: unknown): number {
+    const raw = typeof value === 'number'
+        ? value
+        : typeof value === 'string'
+            ? Number(value)
+            : typeof value === 'object' && value !== null && 'value' in value
+                ? Number((value as { value: number }).value)
+                : WINDOW_HEIGHT_DEFAULT
+
+    if (!Number.isFinite(raw)) {
+        return WINDOW_HEIGHT_DEFAULT
+    }
+
+    const rounded = Math.round(raw)
+    return Math.min(WINDOW_HEIGHT_MAX, Math.max(WINDOW_HEIGHT_MIN, rounded))
+}
+
 function parseSettingsResponse(raw: unknown): DesktopLyricsSettings {
     const base = { ...defaultSettingsLocal }
     let obj: Record<string, unknown> | null = null
@@ -184,6 +228,8 @@ function parseSettingsResponse(raw: unknown): DesktopLyricsSettings {
         strokeWidth: normalizeStrokeWidth(obj.strokeWidth),
         shadowBlur: normalizeShadowBlur(obj.shadowBlur),
         textAlign: normalizeTextAlign(obj.textAlign),
+        windowWidth: normalizeWindowWidth(obj.windowWidth),
+        windowHeight: normalizeWindowHeight(obj.windowHeight),
     }
 }
 
@@ -254,6 +300,12 @@ let lastL1Multi = -1
 let lineHeight = 0
 let pendingDualAnimationFrame = 0
 let pendingMultiAnimationFrame = 0
+let hasManualWindowSize = false
+let isResizing = false
+let resizeStartX = 0
+let resizeStartY = 0
+let resizeStartWidth = WINDOW_WIDTH_DEFAULT
+let resizeStartHeight = WINDOW_HEIGHT_DEFAULT
 
 function getLineIndex(lrcArr: Lyric[], time: number, earlyMs = 0): [ number, number? ] {
     const lrclen = lrcArr.length
@@ -900,11 +952,93 @@ function ensureDOM(visibleLines: number) {
 }
 
 function updateWindowHeight() {
+    if (hasManualWindowSize) {
+        return
+    }
+
     const h = container.offsetHeight
     if (Math.abs(h - lastWindowHeight) > 5) {
         lastWindowHeight = h
         ipcRenderer.send('desktop-lyrics-resize', h)
     }
+}
+
+function applyLockClass(locked: boolean) {
+    document.body.classList.toggle('locked', locked)
+}
+
+function clampWindowSize(width: number, height: number) {
+    return {
+        width: Math.min(WINDOW_WIDTH_MAX, Math.max(WINDOW_WIDTH_MIN, Math.round(width))),
+        height: Math.min(WINDOW_HEIGHT_MAX, Math.max(WINDOW_HEIGHT_MIN, Math.round(height))),
+    }
+}
+
+function syncWindowSizeToMain(width: number, height: number) {
+    const next = clampWindowSize(width, height)
+    cachedSettings.windowWidth = next.width
+    cachedSettings.windowHeight = next.height
+    ipcRenderer.send('desktop-lyrics-set-size', next.width, next.height)
+}
+
+function syncWindowSizeMode() {
+    ipcRenderer.send('desktop-lyrics-size-mode', hasManualWindowSize)
+}
+
+function isManualSizeConfigured(s: DesktopLyricsSettings) {
+    return s.windowWidth !== WINDOW_WIDTH_DEFAULT || s.windowHeight !== WINDOW_HEIGHT_DEFAULT
+}
+
+function initResizeHandle() {
+    const handle = document.getElementById('resizeHandle') as HTMLDivElement | null
+    if (!handle) {
+        return
+    }
+
+    handle.addEventListener('mousedown', (e: MouseEvent) => {
+        if (cachedSettings.lock) {
+            return
+        }
+
+        isResizing = true
+        hasManualWindowSize = true
+        syncWindowSizeMode()
+        resizeStartX = e.screenX
+        resizeStartY = e.screenY
+        resizeStartWidth = cachedSettings.windowWidth
+        resizeStartHeight = cachedSettings.windowHeight
+        handle.classList.add('resizing')
+        document.body.style.cursor = 'se-resize'
+        e.preventDefault()
+        e.stopPropagation()
+    })
+
+    document.addEventListener('mousemove', (e: MouseEvent) => {
+        if (!isResizing) {
+            return
+        }
+
+        const deltaX = e.screenX - resizeStartX
+        const deltaY = e.screenY - resizeStartY
+        syncWindowSizeToMain(resizeStartWidth + deltaX, resizeStartHeight + deltaY)
+    })
+
+    document.addEventListener('mouseup', () => {
+        if (!isResizing) {
+            return
+        }
+
+        isResizing = false
+        handle.classList.remove('resizing')
+        document.body.style.cursor = ''
+
+        const payload = {
+            ...cachedSettings,
+            windowWidth: cachedSettings.windowWidth,
+            windowHeight: cachedSettings.windowHeight,
+        }
+        void settingsConn.invoke(`set:${JSON.stringify(payload)}`)
+    })
 }
 
 function applyBackgroundStyle(s: DesktopLyricsSettings) {
@@ -1255,6 +1389,7 @@ const EXTENSION_ID = '23dc60b0-4621-4ab3-92f7-50baf8b6ec1a'
 
 function applyLockFromSettings(s: DesktopLyricsSettings) {
     setLock(s.lock)
+    applyLockClass(s.lock)
     applyBackgroundStyle(s)
     applyTextEffects(s)
     applyTextAlign(s)
@@ -1277,6 +1412,11 @@ subscribe('playstate', ([ playing, , , current ]) => {
 subscribe('ext-settings', ([ extId ]) => {
     if (extId === EXTENSION_ID) {
         refreshSettings().then(s => {
+            hasManualWindowSize = isManualSizeConfigured(s)
+            syncWindowSizeMode()
+            if (hasManualWindowSize) {
+                syncWindowSizeToMain(s.windowWidth, s.windowHeight)
+            }
             applyLockFromSettings(s)
             resetAnimationState()
             scheduleLyricsAnimation()
@@ -1285,7 +1425,14 @@ subscribe('ext-settings', ([ extId ]) => {
 })
 
 refreshSettings().then(s => {
+    hasManualWindowSize = isManualSizeConfigured(s)
+    syncWindowSizeMode()
+    if (hasManualWindowSize) {
+        syncWindowSizeToMain(s.windowWidth, s.windowHeight)
+    }
     applyLockFromSettings(s)
     resetAnimationState()
     return loadLyrics()
 })
+
+initResizeHandle()
