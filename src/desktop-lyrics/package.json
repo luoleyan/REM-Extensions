@@ -9,6 +9,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@mdi/js": "^7.4.47",
     "NeteaseCloudMusicApi": "^4.24.0"
   }
 }

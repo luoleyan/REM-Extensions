@@ -1,7 +1,9 @@
 import { ipcRenderer } from "electron"
+import { mdiPause, mdiPlay, mdiSkipNext, mdiSkipPrevious } from '@mdi/js'
 
-const { subscribe, connect } = window
+const { subscribe, connect, win } = window
 const player = connect('player-controller')
+const playlist = connect('playlist')
 const lyricServer = connect('lyric')
 const settingsConn = connect('settings')
 
@@ -53,6 +55,9 @@ interface DesktopLyricsSettings {
     textAlign: string
     windowWidth: number
     windowHeight: number
+    showControlsOnHover: boolean
+    controlsPosition: string
+    controlsOpacity: number
 }
 
 interface LyricLineRefs {
@@ -92,6 +97,9 @@ const defaultSettingsLocal: DesktopLyricsSettings = {
     textAlign: 'center',
     windowWidth: WINDOW_WIDTH_DEFAULT,
     windowHeight: WINDOW_HEIGHT_DEFAULT,
+    showControlsOnHover: true,
+    controlsPosition: 'center',
+    controlsOpacity: 0.9,
 }
 
 let cachedSettings: DesktopLyricsSettings = { ...defaultSettingsLocal }
@@ -206,6 +214,30 @@ function normalizeWindowHeight(value: unknown): number {
     return Math.min(WINDOW_HEIGHT_MAX, Math.max(WINDOW_HEIGHT_MIN, rounded))
 }
 
+function normalizeControlsPosition(value: unknown): string {
+    const str = String(value ?? '').toLowerCase().trim()
+    if (str === 'left' || str === 'center' || str === 'right') {
+        return str
+    }
+    return 'center'
+}
+
+function normalizeControlsOpacity(value: unknown): number {
+    const raw = typeof value === 'number'
+        ? value
+        : typeof value === 'string'
+            ? Number(value)
+            : typeof value === 'object' && value !== null && 'value' in value
+                ? Number((value as { value: number }).value)
+                : 0.9
+
+    if (!Number.isFinite(raw)) {
+        return 0.9
+    }
+
+    return Math.max(0.2, Math.min(1, raw))
+}
+
 function parseSettingsResponse(raw: unknown): DesktopLyricsSettings {
     const base = { ...defaultSettingsLocal }
     let obj: Record<string, unknown> | null = null
@@ -230,6 +262,11 @@ function parseSettingsResponse(raw: unknown): DesktopLyricsSettings {
         textAlign: normalizeTextAlign(obj.textAlign),
         windowWidth: normalizeWindowWidth(obj.windowWidth),
         windowHeight: normalizeWindowHeight(obj.windowHeight),
+        showControlsOnHover: typeof obj.showControlsOnHover === 'boolean'
+            ? obj.showControlsOnHover
+            : base.showControlsOnHover,
+        controlsPosition: normalizeControlsPosition(obj.controlsPosition),
+        controlsOpacity: normalizeControlsOpacity(obj.controlsOpacity),
     }
 }
 
@@ -306,6 +343,25 @@ let resizeStartX = 0
 let resizeStartY = 0
 let resizeStartWidth = WINDOW_WIDTH_DEFAULT
 let resizeStartHeight = WINDOW_HEIGHT_DEFAULT
+let controlsVisible = false
+let controlsContainer: HTMLDivElement | null = null
+let playPauseBtn: HTMLDivElement | null = null
+let prevBtn: HTMLDivElement | null = null
+let nextBtn: HTMLDivElement | null = null
+let hoverSensor: HTMLDivElement | null = null
+let controlsHoverCheckTimer = 0
+
+async function safeInvoke<T = unknown>(
+    conn: { invoke: (cmd: string) => Promise<T> },
+    cmd: string,
+): Promise<T | null> {
+    try {
+        return await conn.invoke(cmd)
+    } catch (err) {
+        console.warn(`[desktop-lyrics] invoke failed: ${cmd}`, err)
+        return null
+    }
+}
 
 function getLineIndex(lrcArr: Lyric[], time: number, earlyMs = 0): [ number, number? ] {
     const lrclen = lrcArr.length
@@ -1041,6 +1097,158 @@ function initResizeHandle() {
     })
 }
 
+function applyControlsPosition(position: string) {
+    if (!controlsContainer) {
+        return
+    }
+    controlsContainer.classList.remove('left', 'right')
+    if (position === 'left') {
+        controlsContainer.classList.add('left')
+    } else if (position === 'right') {
+        controlsContainer.classList.add('right')
+    }
+}
+
+function renderControlIcon(pathData: string) {
+    return `<svg class="control-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="${pathData}"></path>
+    </svg>`
+}
+
+function updatePlayPauseIcon(playing: boolean) {
+    if (playPauseBtn) {
+        playPauseBtn.innerHTML = renderControlIcon(playing ? mdiPause : mdiPlay)
+    }
+}
+
+async function togglePlay() {
+    const playing = await safeInvoke<boolean>(player, '.isPlaying')
+    if (typeof playing !== 'boolean') {
+        return
+    }
+    await safeInvoke(player, playing ? ':pause' : ':play')
+    updatePlayPauseIcon(!playing)
+}
+
+function hideControls() {
+    if (!controlsContainer) {
+        return
+    }
+    if (controlsHoverCheckTimer) {
+        window.clearInterval(controlsHoverCheckTimer)
+        controlsHoverCheckTimer = 0
+    }
+    controlsVisible = false
+    controlsContainer.classList.remove('visible')
+    controlsContainer.classList.add('hidden')
+    ipcRenderer.send('desktop-lyrics-hover', false)
+}
+
+function showControls() {
+    if (!controlsContainer || !cachedSettings.showControlsOnHover) {
+        return
+    }
+    applyControlsPosition(cachedSettings.controlsPosition)
+    document.body.style.setProperty('--controls-opacity', String(cachedSettings.controlsOpacity))
+
+    if (controlsVisible) {
+        return
+    }
+
+    controlsVisible = true
+    controlsContainer.classList.remove('hidden')
+    controlsContainer.classList.add('visible')
+    ipcRenderer.send('desktop-lyrics-hover', true)
+    if (!controlsHoverCheckTimer) {
+        controlsHoverCheckTimer = window.setInterval(async () => {
+            try {
+                const inside = await ipcRenderer.invoke('desktop-lyrics-cursor-inside')
+                if (!inside) {
+                    hideControls()
+                }
+            } catch {
+                // ignore polling errors
+            }
+        }, 220)
+    }
+    void safeInvoke<boolean>(player, '.isPlaying').then(playing => {
+        if (typeof playing === 'boolean') {
+            updatePlayPauseIcon(playing)
+        }
+    })
+}
+
+function setupHoverDetection() {
+    let lastMoveAt = 0
+
+    const onHover = () => {
+        if (!cachedSettings.showControlsOnHover) {
+            return
+        }
+        const now = Date.now()
+        if (now - lastMoveAt < 50) {
+            return
+        }
+        lastMoveAt = now
+        showControls()
+    }
+
+    if (hoverSensor) {
+        hoverSensor.addEventListener('mouseenter', onHover)
+        hoverSensor.addEventListener('mousemove', onHover)
+    }
+
+    document.addEventListener('mouseenter', onHover)
+    document.addEventListener('mousemove', onHover)
+
+    document.addEventListener('mouseleave', () => {
+        hideControls()
+    })
+
+    window.addEventListener('blur', () => {
+        hideControls()
+    })
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            hideControls()
+        }
+    })
+}
+
+function initControls() {
+    hoverSensor = document.getElementById('hoverSensor') as HTMLDivElement | null
+    controlsContainer = document.getElementById('controlsContainer') as HTMLDivElement | null
+    playPauseBtn = document.getElementById('playPauseBtn') as HTMLDivElement | null
+    prevBtn = document.getElementById('prevBtn') as HTMLDivElement | null
+    nextBtn = document.getElementById('nextBtn') as HTMLDivElement | null
+
+    if (!controlsContainer || !playPauseBtn || !prevBtn || !nextBtn) {
+        return
+    }
+
+    prevBtn.addEventListener('click', e => {
+        e.stopPropagation()
+        void safeInvoke(playlist, ':previous')
+    })
+    prevBtn.innerHTML = renderControlIcon(mdiSkipPrevious)
+
+    playPauseBtn.addEventListener('click', e => {
+        e.stopPropagation()
+        void togglePlay()
+    })
+
+    nextBtn.addEventListener('click', e => {
+        e.stopPropagation()
+        void safeInvoke(playlist, ':next')
+    })
+    nextBtn.innerHTML = renderControlIcon(mdiSkipNext)
+
+    applyControlsPosition(cachedSettings.controlsPosition)
+    document.body.style.setProperty('--controls-opacity', String(cachedSettings.controlsOpacity))
+    updatePlayPauseIcon(false)
+}
+
 function applyBackgroundStyle(s: DesktopLyricsSettings) {
     const unlocked = !s.lock
     const bgColor = unlocked ? s.bgColorUnlocked : s.bgColorLocked
@@ -1393,10 +1601,15 @@ function applyLockFromSettings(s: DesktopLyricsSettings) {
     applyBackgroundStyle(s)
     applyTextEffects(s)
     applyTextAlign(s)
+    applyControlsPosition(s.controlsPosition)
+    document.body.style.setProperty('--controls-opacity', String(s.controlsOpacity))
+    if (!s.showControlsOnHover) {
+        hideControls()
+    }
 }
 
-subscribe('player', loadLyrics)
-subscribe('playstate', ([ playing, , , current ]) => {
+const playerSub = subscribe('player', loadLyrics)
+const playstateSub = subscribe('playstate', ([ playing, , , current ]) => {
     const currentMs = current * 1000
     if (lastPlayTimeMs >= 0) {
         isSeeking = Math.abs(currentMs - lastPlayTimeMs) > SEEK_THRESHOLD_MS
@@ -1406,10 +1619,13 @@ subscribe('playstate', ([ playing, , , current ]) => {
     lastPlayTimeMs = currentMs
 
     syncPlaybackClock(playing, current)
+    if (typeof playing === 'boolean') {
+        updatePlayPauseIcon(playing)
+    }
     void renderLines(playbackNowMs())
     scheduleLyricsAnimation()
 })
-subscribe('ext-settings', ([ extId ]) => {
+const extSettingsSub = subscribe('ext-settings', ([ extId ]) => {
     if (extId === EXTENSION_ID) {
         refreshSettings().then(s => {
             hasManualWindowSize = isManualSizeConfigured(s)
@@ -1436,3 +1652,22 @@ refreshSettings().then(s => {
 })
 
 initResizeHandle()
+initControls()
+setupHoverDetection()
+
+win.beforeClose = async () => {
+    hideControls()
+    if (controlsHoverCheckTimer) {
+        window.clearInterval(controlsHoverCheckTimer)
+        controlsHoverCheckTimer = 0
+    }
+    await Promise.allSettled([
+        playerSub.close(),
+        playstateSub.close(),
+        extSettingsSub.close(),
+        player.close(),
+        playlist.close(),
+        lyricServer.close(),
+        settingsConn.close(),
+    ])
+}

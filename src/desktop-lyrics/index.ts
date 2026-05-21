@@ -16,6 +16,9 @@ const WINDOW_HEIGHT_MAX = 600
 const TEXT_ALIGN_LEFT = 'left'
 const TEXT_ALIGN_CENTER = 'center'
 const TEXT_ALIGN_RIGHT = 'right'
+const CONTROLS_POSITION_LEFT = 'left'
+const CONTROLS_POSITION_CENTER = 'center'
+const CONTROLS_POSITION_RIGHT = 'right'
 
 function normalizeVisibleLines(value: unknown): number {
     const raw = typeof value === 'number'
@@ -125,6 +128,34 @@ function normalizeWindowHeight(value: unknown): number {
     return Math.min(WINDOW_HEIGHT_MAX, Math.max(WINDOW_HEIGHT_MIN, rounded))
 }
 
+function normalizeControlsPosition(value: unknown): string {
+    const str = String(value ?? '').toLowerCase().trim()
+    if (
+        str === CONTROLS_POSITION_LEFT
+        || str === CONTROLS_POSITION_CENTER
+        || str === CONTROLS_POSITION_RIGHT
+    ) {
+        return str
+    }
+    return CONTROLS_POSITION_CENTER
+}
+
+function normalizeControlsOpacity(value: unknown): number {
+    const raw = typeof value === 'number'
+        ? value
+        : typeof value === 'string'
+            ? Number(value)
+            : typeof value === 'object' && value !== null && 'value' in value
+                ? Number((value as { value: number }).value)
+                : 0.9
+
+    if (!Number.isFinite(raw)) {
+        return 0.9
+    }
+
+    return Math.min(1, Math.max(0.2, raw))
+}
+
 const defaultSettings = {
     colorCurrent: 'gold',
     colorNext: 'aquamarine',
@@ -147,6 +178,9 @@ const defaultSettings = {
     textAlign: 'center',
     windowWidth: 720,
     windowHeight: 120,
+    showControlsOnHover: true,
+    controlsPosition: 'center',
+    controlsOpacity: 0.9,
 }
 
 async function readExtensionSettings() {
@@ -165,6 +199,11 @@ async function readExtensionSettings() {
         textAlign: normalizeTextAlign(parsed.textAlign),
         windowWidth: normalizeWindowWidth(parsed.windowWidth),
         windowHeight: normalizeWindowHeight(parsed.windowHeight),
+        showControlsOnHover: typeof parsed.showControlsOnHover === 'boolean'
+            ? parsed.showControlsOnHover
+            : true,
+        controlsPosition: normalizeControlsPosition(parsed.controlsPosition),
+        controlsOpacity: normalizeControlsOpacity(parsed.controlsOpacity),
     }
 }
 

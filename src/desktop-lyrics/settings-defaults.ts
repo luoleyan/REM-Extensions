@@ -7,6 +7,9 @@ export const WINDOW_HEIGHT_MAX = 600
 export const TEXT_ALIGN_LEFT = 'left'
 export const TEXT_ALIGN_CENTER = 'center'
 export const TEXT_ALIGN_RIGHT = 'right'
+export const CONTROLS_POSITION_LEFT = 'left'
+export const CONTROLS_POSITION_CENTER = 'center'
+export const CONTROLS_POSITION_RIGHT = 'right'
 
 export const defaultSettings = {
     colorCurrent: 'gold',
@@ -30,6 +33,9 @@ export const defaultSettings = {
     textAlign: TEXT_ALIGN_CENTER,
     windowWidth: 720,
     windowHeight: 120,
+    showControlsOnHover: true,
+    controlsPosition: CONTROLS_POSITION_CENTER,
+    controlsOpacity: 0.9,
 }
 
 export const i18nZhCN = {
@@ -54,6 +60,9 @@ export const i18nZhCN = {
     textAlign: '歌词对齐方式(left/center/right)',
     windowWidth: '窗口宽度(px)',
     windowHeight: '窗口高度(px)',
+    showControlsOnHover: '悬浮显示播放控制',
+    controlsPosition: '控制按钮位置(left/center/right)',
+    controlsOpacity: '控制按钮透明度',
 }
 
 export function normalizeBlurRadius(value: unknown): number {
@@ -147,6 +156,34 @@ export function normalizeWindowHeight(value: unknown): number {
     return Math.min(WINDOW_HEIGHT_MAX, Math.max(WINDOW_HEIGHT_MIN, rounded))
 }
 
+export function normalizeControlsPosition(value: unknown): string {
+    const str = String(value ?? '').toLowerCase().trim()
+    if (
+        str === CONTROLS_POSITION_LEFT
+        || str === CONTROLS_POSITION_CENTER
+        || str === CONTROLS_POSITION_RIGHT
+    ) {
+        return str
+    }
+    return CONTROLS_POSITION_CENTER
+}
+
+export function normalizeControlsOpacity(value: unknown): number {
+    const raw = typeof value === 'number'
+        ? value
+        : typeof value === 'string'
+            ? Number(value)
+            : typeof value === 'object' && value !== null && 'value' in value
+                ? Number((value as { value: number }).value)
+                : 0.9
+
+    if (!Number.isFinite(raw)) {
+        return 0.9
+    }
+
+    return Math.max(0.2, Math.min(1, raw))
+}
+
 export function normalizeVisibleLines(value: unknown): number {
     const raw = typeof value === 'number'
         ? value
@@ -177,5 +214,10 @@ export async function readSettings(store: { get: (v?: unknown) => Promise<unknow
         textAlign: normalizeTextAlign(merged.textAlign),
         windowWidth: normalizeWindowWidth(merged.windowWidth),
         windowHeight: normalizeWindowHeight(merged.windowHeight),
+        showControlsOnHover: typeof merged.showControlsOnHover === 'boolean'
+            ? merged.showControlsOnHover
+            : true,
+        controlsPosition: normalizeControlsPosition(merged.controlsPosition),
+        controlsOpacity: normalizeControlsOpacity(merged.controlsOpacity),
     }
 }

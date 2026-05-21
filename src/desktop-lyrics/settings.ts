@@ -9,6 +9,8 @@ import {
     normalizeTextAlign,
     normalizeWindowWidth,
     normalizeWindowHeight,
+    normalizeControlsPosition,
+    normalizeControlsOpacity,
     readSettings
 } from './settings-defaults'
 
@@ -29,6 +31,9 @@ export const onSetting: UIExports.OnSetting = async store => {
         textAlign,
         windowWidth,
         windowHeight,
+        showControlsOnHover,
+        controlsPosition,
+        controlsOpacity,
         ...rest
     } = data
 
@@ -106,6 +111,23 @@ export const onSetting: UIExports.OnSetting = async store => {
             600,
             'windowHeight',
         ),
+        ToggleField(
+            i18nZhCN.showControlsOnHover,
+            Boolean(showControlsOnHover),
+            'showControlsOnHover',
+        ),
+        TextField(
+            i18nZhCN.controlsPosition,
+            String(controlsPosition),
+            'controlsPosition',
+        ),
+        NumberField(
+            i18nZhCN.controlsOpacity,
+            Number(controlsOpacity),
+            0.2,
+            1,
+            'controlsOpacity',
+        ),
     ]
 }
 
@@ -124,6 +146,10 @@ export const onSetSetting: UIExports.OnSetSetting = async (store, name, value) =
                             ? normalizeWindowWidth(value)
                             : name === 'windowHeight'
                                 ? normalizeWindowHeight(value)
+                                : name === 'controlsPosition'
+                                    ? normalizeControlsPosition(value)
+                                    : name === 'controlsOpacity'
+                                        ? normalizeControlsOpacity(value)
                         : value
 
     return store.set({ ...await readSettings(store), [name]: next })
@@ -149,6 +175,9 @@ export const onGetSetting: UIExports.OnGetSetting = async (store, name) => {
     }
     if (name === 'windowHeight') {
         return String(data.windowHeight)
+    }
+    if (name === 'controlsOpacity') {
+        return String(data.controlsOpacity)
     }
 
     return data[name as keyof typeof defaultSettings]
