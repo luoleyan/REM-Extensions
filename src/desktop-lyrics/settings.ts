@@ -6,6 +6,7 @@ import {
     normalizeBlurRadius,
     normalizeStrokeWidth,
     normalizeShadowBlur,
+    normalizeTextAlign,
     readSettings
 } from './settings-defaults'
 
@@ -23,6 +24,7 @@ export const onSetting: UIExports.OnSetting = async store => {
         strokeColor,
         shadowBlur,
         shadowColor,
+        textAlign,
         ...rest
     } = data
 
@@ -67,6 +69,11 @@ export const onSetting: UIExports.OnSetting = async store => {
             String(shadowColor),
             'shadowColor',
         ),
+        TextField(
+            i18nZhCN.textAlign,
+            String(textAlign),
+            'textAlign',
+        ),
         NumberField(
             i18nZhCN.bgBlurRadius,
             Number(bgBlurRadius),
@@ -93,7 +100,9 @@ export const onSetSetting: UIExports.OnSetSetting = async (store, name, value) =
                 ? normalizeStrokeWidth(value)
                 : name === 'shadowBlur'
                     ? normalizeShadowBlur(value)
-            : value
+                    : name === 'textAlign'
+                        ? normalizeTextAlign(value)
+                        : value
 
     return store.set({ ...await readSettings(store), [name]: next })
 }

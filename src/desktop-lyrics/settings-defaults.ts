@@ -1,5 +1,8 @@
 export const VISIBLE_LINES_MIN = 2
 export const VISIBLE_LINES_MAX = 9
+export const TEXT_ALIGN_LEFT = 'left'
+export const TEXT_ALIGN_CENTER = 'center'
+export const TEXT_ALIGN_RIGHT = 'right'
 
 export const defaultSettings = {
     colorCurrent: 'gold',
@@ -20,6 +23,7 @@ export const defaultSettings = {
     strokeColor: '#ffffff',
     shadowBlur: 2,
     shadowColor: 'rgba(0,0,0,0.8)',
+    textAlign: TEXT_ALIGN_CENTER,
 }
 
 export const i18nZhCN = {
@@ -41,6 +45,7 @@ export const i18nZhCN = {
     strokeColor: '描边颜色',
     shadowBlur: '阴影强度(px)',
     shadowColor: '阴影颜色',
+    textAlign: '歌词对齐方式(left/center/right)',
 }
 
 export function normalizeBlurRadius(value: unknown): number {
@@ -92,6 +97,14 @@ export function normalizeShadowBlur(value: unknown): number {
     return Math.max(0, Math.min(20, raw))
 }
 
+export function normalizeTextAlign(value: unknown): string {
+    const str = String(value ?? '').toLowerCase().trim()
+    if (str === TEXT_ALIGN_LEFT || str === TEXT_ALIGN_CENTER || str === TEXT_ALIGN_RIGHT) {
+        return str
+    }
+    return TEXT_ALIGN_CENTER
+}
+
 export function normalizeVisibleLines(value: unknown): number {
     const raw = typeof value === 'number'
         ? value
@@ -119,5 +132,6 @@ export async function readSettings(store: { get: (v?: unknown) => Promise<unknow
         bgBlurRadius: normalizeBlurRadius(merged.bgBlurRadius),
         strokeWidth: normalizeStrokeWidth(merged.strokeWidth),
         shadowBlur: normalizeShadowBlur(merged.shadowBlur),
+        textAlign: normalizeTextAlign(merged.textAlign),
     }
 }

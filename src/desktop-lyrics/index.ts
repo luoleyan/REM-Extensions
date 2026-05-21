@@ -9,6 +9,9 @@ const STROKE_WIDTH_MIN = 0
 const STROKE_WIDTH_MAX = 5
 const SHADOW_BLUR_MIN = 0
 const SHADOW_BLUR_MAX = 20
+const TEXT_ALIGN_LEFT = 'left'
+const TEXT_ALIGN_CENTER = 'center'
+const TEXT_ALIGN_RIGHT = 'right'
 
 function normalizeVisibleLines(value: unknown): number {
     const raw = typeof value === 'number'
@@ -76,6 +79,14 @@ function normalizeShadowBlur(value: unknown): number {
     return Math.min(SHADOW_BLUR_MAX, Math.max(SHADOW_BLUR_MIN, raw))
 }
 
+function normalizeTextAlign(value: unknown): string {
+    const str = String(value ?? '').toLowerCase().trim()
+    if (str === TEXT_ALIGN_LEFT || str === TEXT_ALIGN_CENTER || str === TEXT_ALIGN_RIGHT) {
+        return str
+    }
+    return TEXT_ALIGN_CENTER
+}
+
 const defaultSettings = {
     colorCurrent: 'gold',
     colorNext: 'aquamarine',
@@ -95,6 +106,7 @@ const defaultSettings = {
     strokeColor: '#ffffff',
     shadowBlur: 2,
     shadowColor: 'rgba(0,0,0,0.8)',
+    textAlign: 'center',
 }
 
 async function readExtensionSettings() {
@@ -110,6 +122,7 @@ async function readExtensionSettings() {
         bgBlurRadius: normalizeBlurRadius(parsed.bgBlurRadius),
         strokeWidth: normalizeStrokeWidth(parsed.strokeWidth),
         shadowBlur: normalizeShadowBlur(parsed.shadowBlur),
+        textAlign: normalizeTextAlign(parsed.textAlign),
     }
 }
 

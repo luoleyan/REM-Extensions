@@ -44,6 +44,7 @@ interface DesktopLyricsSettings {
     strokeColor: string
     shadowBlur: number
     shadowColor: string
+    textAlign: string
 }
 
 interface LyricLineRefs {
@@ -80,6 +81,7 @@ const defaultSettingsLocal: DesktopLyricsSettings = {
     strokeColor: '#ffffff',
     shadowBlur: 2,
     shadowColor: 'rgba(0,0,0,0.8)',
+    textAlign: 'center',
 }
 
 let cachedSettings: DesktopLyricsSettings = { ...defaultSettingsLocal }
@@ -152,6 +154,14 @@ function normalizeShadowBlur(value: unknown): number {
     return Math.max(0, Math.min(20, raw))
 }
 
+function normalizeTextAlign(value: unknown): string {
+    const str = String(value ?? '').toLowerCase().trim()
+    if (str === 'left' || str === 'center' || str === 'right') {
+        return str
+    }
+    return 'center'
+}
+
 function parseSettingsResponse(raw: unknown): DesktopLyricsSettings {
     const base = { ...defaultSettingsLocal }
     let obj: Record<string, unknown> | null = null
@@ -173,6 +183,7 @@ function parseSettingsResponse(raw: unknown): DesktopLyricsSettings {
         bgBlurRadius: normalizeBlurRadius(obj.bgBlurRadius),
         strokeWidth: normalizeStrokeWidth(obj.strokeWidth),
         shadowBlur: normalizeShadowBlur(obj.shadowBlur),
+        textAlign: normalizeTextAlign(obj.textAlign),
     }
 }
 
@@ -915,6 +926,28 @@ function applyTextEffects(s: DesktopLyricsSettings) {
     document.body.style.setProperty('--shadow-color', s.shadowColor)
 }
 
+function applyTextAlign(s: DesktopLyricsSettings) {
+    const alignMap: Record<string, string> = {
+        left: 'flex-start',
+        center: 'center',
+        right: 'flex-end',
+    }
+    const justifyMap: Record<string, string> = {
+        left: 'flex-start',
+        center: 'center',
+        right: 'flex-end',
+    }
+    const originMap: Record<string, string> = {
+        left: 'left',
+        center: 'center',
+        right: 'right',
+    }
+    const key = s.textAlign
+    document.body.style.setProperty('--text-align', alignMap[key] ?? 'center')
+    document.body.style.setProperty('--text-justify', justifyMap[key] ?? 'center')
+    document.body.style.setProperty('--text-origin', originMap[key] ?? 'center')
+}
+
 function applyTranslationStyle(el: HTMLDivElement, color: string, fontSize: string, focused: boolean) {
     el.style.color = color
     el.style.fontSize = fontSize
@@ -1182,6 +1215,7 @@ async function renderLines(time: number) {
     const visibleLines = normalizeVisibleLines(s.visibleLines)
     applyBackgroundStyle(s)
     applyTextEffects(s)
+    applyTextAlign(s)
 
     ensureDOM(visibleLines)
 
@@ -1223,6 +1257,7 @@ function applyLockFromSettings(s: DesktopLyricsSettings) {
     setLock(s.lock)
     applyBackgroundStyle(s)
     applyTextEffects(s)
+    applyTextAlign(s)
 }
 
 subscribe('player', loadLyrics)
