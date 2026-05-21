@@ -12,6 +12,10 @@ export const defaultSettings = {
     fontSizeTranslation: 'large',
     visibleLines: 2,
     karaokeMode: false,
+    bgColorLocked: 'rgba(0,0,0,0)',
+    bgColorUnlocked: 'rgba(0,0,0,0.5)',
+    bgBlurEnabled: false,
+    bgBlurRadius: 8,
 }
 
 export const i18nZhCN = {
@@ -25,6 +29,27 @@ export const i18nZhCN = {
     fontSizeTranslation: '翻译歌词字号',
     visibleLines: '可见歌词行数',
     karaokeMode: '卡拉OK逐字高亮',
+    bgColorLocked: '锁定时背景色',
+    bgColorUnlocked: '解锁时背景色',
+    bgBlurEnabled: '启用毛玻璃',
+    bgBlurRadius: '毛玻璃强度(px)',
+}
+
+export function normalizeBlurRadius(value: unknown): number {
+    const raw = typeof value === 'number'
+        ? value
+        : typeof value === 'string'
+            ? Number(value)
+            : typeof value === 'object' && value !== null && 'value' in value
+                ? Number((value as { value: number }).value)
+                : 8
+
+    if (!Number.isFinite(raw)) {
+        return 8
+    }
+
+    const rounded = Math.round(raw)
+    return Math.max(0, Math.min(48, rounded))
 }
 
 export function normalizeVisibleLines(value: unknown): number {
@@ -51,5 +76,6 @@ export async function readSettings(store: { get: (v?: unknown) => Promise<unknow
     return {
         ...merged,
         visibleLines: normalizeVisibleLines(merged.visibleLines),
+        bgBlurRadius: normalizeBlurRadius(merged.bgBlurRadius),
     }
 }

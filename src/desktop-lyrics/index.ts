@@ -3,6 +3,8 @@ import { Socket } from 'net'
 
 const VISIBLE_LINES_MIN = 2
 const VISIBLE_LINES_MAX = 9
+const BG_BLUR_MIN = 0
+const BG_BLUR_MAX = 48
 
 function normalizeVisibleLines(value: unknown): number {
     const raw = typeof value === 'number'
@@ -21,6 +23,23 @@ function normalizeVisibleLines(value: unknown): number {
     return Math.min(VISIBLE_LINES_MAX, Math.max(VISIBLE_LINES_MIN, rounded))
 }
 
+function normalizeBlurRadius(value: unknown): number {
+    const raw = typeof value === 'number'
+        ? value
+        : typeof value === 'string'
+            ? Number(value)
+            : typeof value === 'object' && value !== null && 'value' in value
+                ? Number((value as { value: number }).value)
+                : 8
+
+    if (!Number.isFinite(raw)) {
+        return 8
+    }
+
+    const rounded = Math.round(raw)
+    return Math.min(BG_BLUR_MAX, Math.max(BG_BLUR_MIN, rounded))
+}
+
 const defaultSettings = {
     colorCurrent: 'gold',
     colorNext: 'aquamarine',
@@ -32,6 +51,10 @@ const defaultSettings = {
     fontSizeTranslation: 'large',
     visibleLines: 2,
     karaokeMode: false,
+    bgColorLocked: 'rgba(0,0,0,0)',
+    bgColorUnlocked: 'rgba(0,0,0,0.5)',
+    bgBlurEnabled: false,
+    bgBlurRadius: 8,
 }
 
 async function readExtensionSettings() {
@@ -44,6 +67,7 @@ async function readExtensionSettings() {
         ...defaultSettings,
         ...parsed,
         visibleLines: normalizeVisibleLines(parsed.visibleLines),
+        bgBlurRadius: normalizeBlurRadius(parsed.bgBlurRadius),
     }
 }
 

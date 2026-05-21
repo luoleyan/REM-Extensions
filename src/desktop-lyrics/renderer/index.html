@@ -20,10 +20,9 @@
             flex-direction: column;
             justify-content: center;
             align-items: center;
-        }
-
-        body.unlock {
-            background-color: rgba(0, 0, 0, 0.5);
+            background-color: var(--bg-color, rgba(0, 0, 0, 0));
+            backdrop-filter: var(--bg-blur, none);
+            -webkit-backdrop-filter: var(--bg-blur, none);
         }
 
         .lrc {

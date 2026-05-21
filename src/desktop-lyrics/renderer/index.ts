@@ -36,6 +36,10 @@ interface DesktopLyricsSettings {
     fontSizeTranslation: string
     visibleLines: number
     karaokeMode: boolean
+    bgColorLocked: string
+    bgColorUnlocked: string
+    bgBlurEnabled: boolean
+    bgBlurRadius: number
 }
 
 interface LyricLineRefs {
@@ -64,6 +68,10 @@ const defaultSettingsLocal: DesktopLyricsSettings = {
     fontSizeTranslation: 'large',
     visibleLines: 2,
     karaokeMode: false,
+    bgColorLocked: 'rgba(0,0,0,0)',
+    bgColorUnlocked: 'rgba(0,0,0,0.5)',
+    bgBlurEnabled: false,
+    bgBlurRadius: 8,
 }
 
 let cachedSettings: DesktopLyricsSettings = { ...defaultSettingsLocal }
@@ -88,6 +96,22 @@ function normalizeVisibleLines(value: unknown): number {
     return Math.min(VISIBLE_LINES_MAX, Math.max(VISIBLE_LINES_MIN, rounded))
 }
 
+function normalizeBlurRadius(value: unknown): number {
+    const raw = typeof value === 'number'
+        ? value
+        : typeof value === 'string'
+            ? Number(value)
+            : typeof value === 'object' && value !== null && 'value' in value
+                ? Number((value as { value: number }).value)
+                : 8
+
+    if (!Number.isFinite(raw)) {
+        return 8
+    }
+
+    return Math.max(0, Math.min(48, Math.round(raw)))
+}
+
 function parseSettingsResponse(raw: unknown): DesktopLyricsSettings {
     const base = { ...defaultSettingsLocal }
     let obj: Record<string, unknown> | null = null
@@ -106,6 +130,7 @@ function parseSettingsResponse(raw: unknown): DesktopLyricsSettings {
         ...base,
         ...(obj as object),
         visibleLines: normalizeVisibleLines(obj.visibleLines),
+        bgBlurRadius: normalizeBlurRadius(obj.bgBlurRadius),
     }
 }
 
@@ -829,6 +854,18 @@ function updateWindowHeight() {
     }
 }
 
+function applyBackgroundStyle(s: DesktopLyricsSettings) {
+    const unlocked = !s.lock
+    const bgColor = unlocked ? s.bgColorUnlocked : s.bgColorLocked
+    document.body.style.setProperty('--bg-color', bgColor)
+
+    if (s.bgBlurEnabled && s.bgBlurRadius > 0) {
+        document.body.style.setProperty('--bg-blur', `blur(${s.bgBlurRadius}px)`)
+    } else {
+        document.body.style.removeProperty('--bg-blur')
+    }
+}
+
 function applyTranslationStyle(el: HTMLDivElement, color: string, fontSize: string, focused: boolean) {
     el.style.color = color
     el.style.fontSize = fontSize
@@ -1094,14 +1131,13 @@ function renderMultiLine(s: DesktopLyricsSettings, l1: number, time: number) {
 async function renderLines(time: number) {
     const s = cachedSettings
     const visibleLines = normalizeVisibleLines(s.visibleLines)
+    applyBackgroundStyle(s)
 
     ensureDOM(visibleLines)
 
     if (!lrc?.length) {
         renderPlaceholder(s)
-        if (setLock(s.lock)) {
-            document.body.classList[!s.lock ? 'add' : 'remove']('unlock')
-        }
+        setLock(s.lock)
         updateWindowHeight()
         return
     }
@@ -1114,9 +1150,7 @@ async function renderLines(time: number) {
         renderMultiLine(s, l1, time)
     }
 
-    if (setLock(s.lock)) {
-        document.body.classList[!s.lock ? 'add' : 'remove']('unlock')
-    }
+    setLock(s.lock)
 
     updateWindowHeight()
 }
@@ -1136,9 +1170,8 @@ function lock() {
 const EXTENSION_ID = '23dc60b0-4621-4ab3-92f7-50baf8b6ec1a'
 
 function applyLockFromSettings(s: DesktopLyricsSettings) {
-    if (setLock(s.lock)) {
-        document.body.classList[!s.lock ? 'add' : 'remove']('unlock')
-    }
+    setLock(s.lock)
+    applyBackgroundStyle(s)
 }
 
 subscribe('player', loadLyrics)
