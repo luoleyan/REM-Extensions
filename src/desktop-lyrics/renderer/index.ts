@@ -167,6 +167,15 @@ const LINE_SWITCH_EARLY_MS = 220
 const LRC_LINE_SWITCH_EARLY_MS = 140
 const SEEK_POLL_INTERVAL_MS = 100
 const AUX_SYNC_WINDOW_MS = 3200
+const SEEK_THRESHOLD_MS = 2000
+
+let isSeeking = false
+let lastPlayTimeMs = -1
+let lastL1Dual = -1
+let lastL1Multi = -1
+let lineHeight = 0
+let pendingDualAnimationFrame = 0
+let pendingMultiAnimationFrame = 0
 
 function getLineIndex(lrcArr: Lyric[], time: number, earlyMs = 0): [ number, number? ] {
     const lrclen = lrcArr.length
@@ -262,7 +271,7 @@ function lyricAtTime(arr: Lyric[] | null, targetTime: number, fallbackIdx: numbe
         return ''
     }
 
-    return arr[idx]?.lyric.trim() ?? ''
+    return arr?.[idx]?.lyric.trim() ?? ''
 }
 
 function parseLrc(lrcstr: string | undefined): Lyric[] | null {
@@ -599,8 +608,9 @@ function updateKaraokeScroll(
     spans: HTMLSpanElement[],
     now: number,
 ) {
-    resetLyricLayout(viewport, textEl)
+    viewport.classList.remove('fit-static')
     viewport.classList.add('scroll-karaoke')
+    textEl.style.removeProperty('--fit-scale')
 
     const maxW = viewport.clientWidth
     if (maxW <= 0 || spans.length === 0) {
@@ -734,6 +744,35 @@ function wrapInViewport(content: HTMLDivElement): HTMLDivElement {
     return viewport
 }
 
+function clearLineAnimationClasses(refs: LyricLineRefs) {
+    refs.line.classList.remove('entering', 'leaving')
+}
+
+function resetAnimationState() {
+    if (pendingDualAnimationFrame) {
+        cancelAnimationFrame(pendingDualAnimationFrame)
+        pendingDualAnimationFrame = 0
+    }
+    if (pendingMultiAnimationFrame) {
+        cancelAnimationFrame(pendingMultiAnimationFrame)
+        pendingMultiAnimationFrame = 0
+    }
+
+    lastL1Dual = -1
+    lastL1Multi = -1
+    isSeeking = false
+    lastPlayTimeMs = -1
+    lineHeight = 0
+
+    container.classList.remove('multi-animating')
+    container.style.removeProperty('--multi-shift')
+
+    for (const refs of domLines) {
+        clearLineAnimationClasses(refs)
+        refs.line.style.removeProperty('transform')
+    }
+}
+
 function createLineElement(): LyricLineRefs {
     const line = document.createElement('div')
     line.className = 'lrc-line'
@@ -768,6 +807,7 @@ function initDOM(visibleLines: number) {
     }
 
     domLineCount = visibleLines
+    resetAnimationState()
 }
 
 function ensureDOM(visibleLines: number) {
@@ -804,9 +844,20 @@ function clearLineState(refs: LyricLineRefs) {
     refs.text.classList.remove('focus')
     refs.roma.classList.remove('focus')
     refs.trans.classList.remove('focus')
-    resetLyricLayout(refs.textViewport, refs.text)
+    if (!refs.text.classList.contains('karaoke-line')) {
+        resetLyricLayout(refs.textViewport, refs.text)
+    }
     resetLyricLayout(refs.romaViewport, refs.roma)
     resetLyricLayout(refs.transViewport, refs.trans)
+}
+
+function ensureLineHeight() {
+    if (lineHeight > 0) {
+        return
+    }
+
+    const first = domLines[0]?.line
+    lineHeight = first ? Math.max(48, first.offsetHeight + 4) : 56
 }
 
 function fillRomajiAndTranslation(
@@ -866,7 +917,10 @@ function renderDualLine(s: DesktopLyricsSettings, l1: number, time: number, l2?:
     let current: LyricLineRefs
     let next: LyricLineRefs
 
-    if (l1 % 2) {
+    if (s.karaokeMode) {
+        current = top
+        next = bottom
+    } else if (l1 % 2) {
         current = bottom
         next = top
     } else {
@@ -886,27 +940,53 @@ function renderDualLine(s: DesktopLyricsSettings, l1: number, time: number, l2?:
     const nextLrcIndex = resolveLrcIndex(l2 ?? l1, s)
     const nextLineTime = lineStartTime(l2 ?? l1, nextLrcIndex, s)
 
-    const currentIsKaraoke = renderMainLyricText(
-        current.textViewport,
-        current.text,
-        currentLrcIndex,
-        time,
-        s,
-    )
-    if (!currentIsKaraoke) {
-        current.text.style.color = s.colorCurrent
+    const applyDualContent = () => {
+        const currentIsKaraoke = renderMainLyricText(
+            current.textViewport,
+            current.text,
+            currentLrcIndex,
+            time,
+            s,
+        )
+        if (!currentIsKaraoke) {
+            current.text.style.color = s.colorCurrent
+        }
+
+        next.text.classList.remove('karaoke-line')
+        karaokeDomCache.delete(next.text)
+        next.text.innerText = l2 !== undefined ? lrc![nextLrcIndex].lyric : ' '
+        next.text.style.color = s.colorNext
+        fitStaticLyricInViewport(next.textViewport, next.text)
+
+        fillRomajiAndTranslation(current, s, currentLrcIndex, currentLineTime, true)
+        fillRomajiAndTranslation(next, s, nextLrcIndex, nextLineTime, false)
+        layoutAuxiliaryLyrics(current)
+        layoutAuxiliaryLyrics(next)
     }
 
-    next.text.classList.remove('karaoke-line')
-    karaokeDomCache.delete(next.text)
-    next.text.innerText = l2 !== undefined ? lrc![nextLrcIndex].lyric : ' '
-    next.text.style.color = s.colorNext
-    fitStaticLyricInViewport(next.textViewport, next.text)
+    const lineChanged = lastL1Dual >= 0 && lastL1Dual !== l1
+    lastL1Dual = l1
+    const shouldAnimate = lineChanged && !isSeeking && !s.karaokeMode
 
-    fillRomajiAndTranslation(current, s, currentLrcIndex, currentLineTime, true)
-    fillRomajiAndTranslation(next, s, nextLrcIndex, nextLineTime, false)
-    layoutAuxiliaryLyrics(current)
-    layoutAuxiliaryLyrics(next)
+    if (shouldAnimate) {
+        current.line.classList.add('leaving')
+        next.line.classList.add('entering')
+
+        if (pendingDualAnimationFrame) {
+            cancelAnimationFrame(pendingDualAnimationFrame)
+        }
+
+        pendingDualAnimationFrame = requestAnimationFrame(() => {
+            pendingDualAnimationFrame = 0
+            applyDualContent()
+            current.line.classList.remove('leaving')
+            next.line.classList.remove('entering')
+        })
+    } else {
+        clearLineAnimationClasses(current)
+        clearLineAnimationClasses(next)
+        applyDualContent()
+    }
 }
 
 function renderMultiLine(s: DesktopLyricsSettings, l1: number, time: number) {
@@ -916,6 +996,30 @@ function renderMultiLine(s: DesktopLyricsSettings, l1: number, time: number) {
     const lineCount = useKaraokeTimeline ? klyric!.length : lrc!.length
     const startIdx = Math.max(0, l1 - half)
     const endIdx = Math.min(lineCount - 1, l1 + half)
+
+    const prevL1 = lastL1Multi
+    const lineDelta = prevL1 >= 0 ? l1 - prevL1 : 0
+    const lineChanged = prevL1 >= 0 && prevL1 !== l1
+    lastL1Multi = l1
+    ensureLineHeight()
+
+    const shouldAnimate = lineChanged
+        && Math.abs(lineDelta) <= 1
+        && !isSeeking
+        && !s.karaokeMode
+
+    container.classList.remove('multi-animating')
+    container.style.removeProperty('--multi-shift')
+
+    if (shouldAnimate) {
+        const shift = lineDelta > 0 ? lineHeight : -lineHeight
+        container.classList.add('multi-animating')
+        container.style.setProperty('--multi-shift', `${shift}px`)
+
+        if (pendingMultiAnimationFrame) {
+            cancelAnimationFrame(pendingMultiAnimationFrame)
+        }
+    }
 
     for (let slot = 0; slot < visibleLines; slot++) {
         const refs = domLines[slot]
@@ -961,6 +1065,29 @@ function renderMultiLine(s: DesktopLyricsSettings, l1: number, time: number) {
 
         fillRomajiAndTranslation(refs, s, lrcIndex, lineTime, lyricIdx === l1)
         layoutAuxiliaryLyrics(refs)
+    }
+
+    if (shouldAnimate) {
+        const firstLine = domLines[0]
+        const lastLine = domLines[visibleLines - 1]
+        if (lineDelta > 0) {
+            firstLine?.line.classList.add('leaving')
+            lastLine?.line.classList.add('entering')
+        } else {
+            firstLine?.line.classList.add('entering')
+            lastLine?.line.classList.add('leaving')
+        }
+
+        pendingMultiAnimationFrame = requestAnimationFrame(() => {
+            pendingMultiAnimationFrame = 0
+            container.style.setProperty('--multi-shift', '0px')
+            firstLine?.line.classList.remove('entering', 'leaving')
+            lastLine?.line.classList.remove('entering', 'leaving')
+        })
+    } else {
+        for (const refs of domLines) {
+            clearLineAnimationClasses(refs)
+        }
     }
 }
 
@@ -1016,6 +1143,14 @@ function applyLockFromSettings(s: DesktopLyricsSettings) {
 
 subscribe('player', loadLyrics)
 subscribe('playstate', ([ playing, , , current ]) => {
+    const currentMs = current * 1000
+    if (lastPlayTimeMs >= 0) {
+        isSeeking = Math.abs(currentMs - lastPlayTimeMs) > SEEK_THRESHOLD_MS
+    } else {
+        isSeeking = false
+    }
+    lastPlayTimeMs = currentMs
+
     syncPlaybackClock(playing, current)
     void renderLines(playbackNowMs())
     scheduleLyricsAnimation()
@@ -1024,6 +1159,7 @@ subscribe('ext-settings', ([ extId ]) => {
     if (extId === EXTENSION_ID) {
         refreshSettings().then(s => {
             applyLockFromSettings(s)
+            resetAnimationState()
             scheduleLyricsAnimation()
         })
     }
@@ -1031,5 +1167,6 @@ subscribe('ext-settings', ([ extId ]) => {
 
 refreshSettings().then(s => {
     applyLockFromSettings(s)
+    resetAnimationState()
     return loadLyrics()
 })

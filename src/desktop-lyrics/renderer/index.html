@@ -49,6 +49,7 @@
             height: fit-content;
             box-sizing: border-box;
             padding: 0 12px;
+            transition: transform 0.28s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
 
         .container.dual-line > :last-child {
@@ -62,7 +63,25 @@
             gap: 2px;
             width: 100%;
             max-width: 100%;
-            transition: opacity 0.2s ease, scale 0.16s ease-in-out;
+            transition:
+                transform 0.28s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+                opacity 0.24s ease,
+                scale 0.16s ease-in-out;
+            will-change: transform, opacity;
+        }
+
+        .container.multi-animating {
+            transform: translateY(var(--multi-shift, 0px));
+        }
+
+        .lrc-line.entering {
+            opacity: 0.45;
+            transform: translateY(14px);
+        }
+
+        .lrc-line.leaving {
+            opacity: 0.45;
+            transform: translateY(-14px);
         }
 
         .lrc.romaji {
