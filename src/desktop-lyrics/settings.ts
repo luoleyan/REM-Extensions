@@ -1,4 +1,4 @@
-import { fromObject, NumberField, TextField, ToggleField } from 'extension/ui/index'
+import { NumberField, TextField, ToggleField } from 'extension/ui/index'
 import {
     defaultSettings,
     i18nZhCN,
@@ -11,7 +11,7 @@ import {
     normalizeWindowHeight,
     normalizeControlsPosition,
     normalizeControlsOpacity,
-    readSettings
+    readSettings,
 } from './settings-defaults'
 
 export { defaultSettings }
@@ -19,7 +19,16 @@ export { defaultSettings }
 export const onSetting: UIExports.OnSetting = async store => {
     const data = await readSettings(store)
     const {
+        colorCurrent,
+        colorNext,
+        fontSize,
+        lock,
+        showTranslation,
+        showRomaji,
+        colorTranslation,
+        fontSizeTranslation,
         visibleLines,
+        karaokeMode,
         bgBlurEnabled,
         bgBlurRadius,
         bgColorLocked,
@@ -34,11 +43,54 @@ export const onSetting: UIExports.OnSetting = async store => {
         showControlsOnHover,
         controlsPosition,
         controlsOpacity,
-        ...rest
     } = data
 
     return [
-        ...fromObject(rest, i18nZhCN),
+        TextField(
+            i18nZhCN.colorCurrent,
+            String(colorCurrent),
+            'colorCurrent',
+        ),
+        TextField(
+            i18nZhCN.colorNext,
+            String(colorNext),
+            'colorNext',
+        ),
+        TextField(
+            i18nZhCN.fontSize,
+            String(fontSize),
+            'fontSize',
+        ),
+        ToggleField(
+            i18nZhCN.lock,
+            Boolean(lock),
+            'lock',
+        ),
+        ToggleField(
+            i18nZhCN.showTranslation,
+            Boolean(showTranslation),
+            'showTranslation',
+        ),
+        ToggleField(
+            i18nZhCN.showRomaji,
+            Boolean(showRomaji),
+            'showRomaji',
+        ),
+        TextField(
+            i18nZhCN.colorTranslation,
+            String(colorTranslation),
+            'colorTranslation',
+        ),
+        TextField(
+            i18nZhCN.fontSizeTranslation,
+            String(fontSizeTranslation),
+            'fontSizeTranslation',
+        ),
+        ToggleField(
+            i18nZhCN.karaokeMode,
+            Boolean(karaokeMode),
+            'karaokeMode',
+        ),
         ToggleField(
             i18nZhCN.bgBlurEnabled,
             Boolean(bgBlurEnabled),
@@ -121,11 +173,9 @@ export const onSetting: UIExports.OnSetting = async store => {
             String(controlsPosition),
             'controlsPosition',
         ),
-        NumberField(
+        TextField(
             i18nZhCN.controlsOpacity,
-            Number(controlsOpacity),
-            0.2,
-            1,
+            String(controlsOpacity),
             'controlsOpacity',
         ),
     ]
@@ -150,7 +200,7 @@ export const onSetSetting: UIExports.OnSetSetting = async (store, name, value) =
                                     ? normalizeControlsPosition(value)
                                     : name === 'controlsOpacity'
                                         ? normalizeControlsOpacity(value)
-                        : value
+                                        : value
 
     return store.set({ ...await readSettings(store), [name]: next })
 }
@@ -182,4 +232,3 @@ export const onGetSetting: UIExports.OnGetSetting = async (store, name) => {
 
     return data[name as keyof typeof defaultSettings]
 }
-

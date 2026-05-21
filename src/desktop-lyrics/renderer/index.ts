@@ -333,6 +333,7 @@ const SEEK_THRESHOLD_MS = 2000
 let isSeeking = false
 let lastPlayTimeMs = -1
 let lastL1Dual = -1
+let lastL2Dual = -2
 let lastL1Multi = -1
 let lineHeight = 0
 let pendingDualAnimationFrame = 0
@@ -350,6 +351,7 @@ let prevBtn: HTMLDivElement | null = null
 let nextBtn: HTMLDivElement | null = null
 let hoverSensor: HTMLDivElement | null = null
 let controlsHoverCheckTimer = 0
+let isPointerInsideLyricsWindow = false
 
 async function safeInvoke<T = unknown>(
     conn: { invoke: (cmd: string) => Promise<T> },
@@ -945,6 +947,7 @@ function resetAnimationState() {
     }
 
     lastL1Dual = -1
+    lastL2Dual = -2
     lastL1Multi = -1
     isSeeking = false
     lastPlayTimeMs = -1
@@ -1144,6 +1147,24 @@ function hideControls() {
     ipcRenderer.send('desktop-lyrics-hover', false)
 }
 
+function startControlsHoverPollingIfNeeded() {
+    if (!cachedSettings.lock || controlsHoverCheckTimer) {
+        return
+    }
+
+    controlsHoverCheckTimer = window.setInterval(async () => {
+        try {
+            const inside = await ipcRenderer.invoke('desktop-lyrics-cursor-inside')
+            if (!inside) {
+                isPointerInsideLyricsWindow = false
+                hideControls()
+            }
+        } catch {
+            // ignore polling errors
+        }
+    }, 320)
+}
+
 function showControls() {
     if (!controlsContainer || !cachedSettings.showControlsOnHover) {
         return
@@ -1152,6 +1173,7 @@ function showControls() {
     document.body.style.setProperty('--controls-opacity', String(cachedSettings.controlsOpacity))
 
     if (controlsVisible) {
+        startControlsHoverPollingIfNeeded()
         return
     }
 
@@ -1159,18 +1181,7 @@ function showControls() {
     controlsContainer.classList.remove('hidden')
     controlsContainer.classList.add('visible')
     ipcRenderer.send('desktop-lyrics-hover', true)
-    if (!controlsHoverCheckTimer) {
-        controlsHoverCheckTimer = window.setInterval(async () => {
-            try {
-                const inside = await ipcRenderer.invoke('desktop-lyrics-cursor-inside')
-                if (!inside) {
-                    hideControls()
-                }
-            } catch {
-                // ignore polling errors
-            }
-        }, 220)
-    }
+    startControlsHoverPollingIfNeeded()
     void safeInvoke<boolean>(player, '.isPlaying').then(playing => {
         if (typeof playing === 'boolean') {
             updatePlayPauseIcon(playing)
@@ -1185,6 +1196,7 @@ function setupHoverDetection() {
         if (!cachedSettings.showControlsOnHover) {
             return
         }
+        isPointerInsideLyricsWindow = true
         const now = Date.now()
         if (now - lastMoveAt < 50) {
             return
@@ -1202,15 +1214,18 @@ function setupHoverDetection() {
     document.addEventListener('mousemove', onHover)
 
     document.addEventListener('mouseleave', () => {
+        isPointerInsideLyricsWindow = false
         hideControls()
     })
 
     window.addEventListener('blur', () => {
+        isPointerInsideLyricsWindow = false
         hideControls()
     })
 
     document.addEventListener('visibilitychange', () => {
         if (document.hidden) {
+            isPointerInsideLyricsWindow = false
             hideControls()
         }
     })
@@ -1367,6 +1382,11 @@ function renderPlaceholder(s: DesktopLyricsSettings) {
 }
 
 function renderDualLine(s: DesktopLyricsSettings, l1: number, time: number, l2?: number) {
+    const nextDual = l2 ?? -1
+    if (!s.karaokeMode && lastL1Dual === l1 && lastL2Dual === nextDual) {
+        return
+    }
+
     const top = domLines[0]
     const bottom = domLines[1]
 
@@ -1427,6 +1447,7 @@ function renderDualLine(s: DesktopLyricsSettings, l1: number, time: number, l2?:
 
     const lineChanged = lastL1Dual >= 0 && lastL1Dual !== l1
     lastL1Dual = l1
+    lastL2Dual = nextDual
     const shouldAnimate = lineChanged && !isSeeking && !s.karaokeMode
 
     if (shouldAnimate) {
@@ -1437,9 +1458,11 @@ function renderDualLine(s: DesktopLyricsSettings, l1: number, time: number, l2?:
             cancelAnimationFrame(pendingDualAnimationFrame)
         }
 
+        // Apply content in the same frame to avoid one-frame layout reset flicker.
+        applyDualContent()
+
         pendingDualAnimationFrame = requestAnimationFrame(() => {
             pendingDualAnimationFrame = 0
-            applyDualContent()
             current.line.classList.remove('leaving')
             next.line.classList.remove('entering')
         })
@@ -1451,6 +1474,10 @@ function renderDualLine(s: DesktopLyricsSettings, l1: number, time: number, l2?:
 }
 
 function renderMultiLine(s: DesktopLyricsSettings, l1: number, time: number) {
+    if (!s.karaokeMode && lastL1Multi === l1) {
+        return
+    }
+
     const visibleLines = normalizeVisibleLines(s.visibleLines)
     const half = Math.floor(visibleLines / 2)
     const useKaraokeTimeline = s.karaokeMode && !!klyric?.length
@@ -1605,6 +1632,8 @@ function applyLockFromSettings(s: DesktopLyricsSettings) {
     document.body.style.setProperty('--controls-opacity', String(s.controlsOpacity))
     if (!s.showControlsOnHover) {
         hideControls()
+    } else if (controlsVisible && isPointerInsideLyricsWindow) {
+        showControls()
     }
 }
 

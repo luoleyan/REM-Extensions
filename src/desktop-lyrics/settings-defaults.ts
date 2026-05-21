@@ -203,7 +203,10 @@ export function normalizeVisibleLines(value: unknown): number {
 
 export async function readSettings(store: { get: (v?: unknown) => Promise<unknown> }) {
     const saved = await store.get(defaultSettings)
-    const merged = { ...defaultSettings, ...(saved as object ?? {}) }
+    const safeSaved = saved && typeof saved === 'object' && !Array.isArray(saved)
+        ? saved as Record<string, unknown>
+        : {}
+    const merged = { ...defaultSettings, ...safeSaved }
 
     return {
         ...merged,
