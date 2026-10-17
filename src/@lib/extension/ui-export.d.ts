@@ -123,6 +123,10 @@ declare namespace UIExports {
      * Only for "uiEntry"
      */
     type OnReady = (mods: UIModules) => void | Promise<void>
+    /**
+     * Only for "uiEntry"
+     */
+    type OnUnload = (mods?: UIModules) => void | Promise<void>
 
 
     /**

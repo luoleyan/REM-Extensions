@@ -10,30 +10,34 @@ const remPath = (...paths) => {
 }
 
 async function buildSourceAndSyncFiles() {
-    await buildSource(false)
+    const targets = process.argv.length > 2
+        ? process.argv.slice(2)
+        : index
+
+    await buildSource(false, targets)
 
     const { default: cpy } = await import('cpy')
     const EXTENSION_ROOT = remPath('Data', 'Extensions')
-    const targets = []
-    if (process.argv.length > 2) {
-        targets.push(...process.argv.slice(2))
-    } else {
-        targets.push(...await fsp.readdir(EXTENSION_ROOT))
-    }
 
-    targets.forEach(async dest => {
-        if (!index.includes(dest)) {
-            return
-        }
-
+    await Promise.all(targets.map(async dest => {
         const source = join(__dirname, '../build', dest)
         const destPath = join(EXTENSION_ROOT, dest)
 
-        if (fs.existsSync(destPath))
-            await fsp.rm(destPath, { recursive: true })
+        if (!fs.existsSync(source)) {
+            console.warn(`Skip sync: build output missing for ${dest}`)
+            return
+        }
 
-        cpy(`${source}/**`, destPath)
-    })
+        if (fs.existsSync(destPath)) {
+            await fsp.rm(destPath, { recursive: true })
+        }
+
+        await cpy(`${source}/**`, destPath)
+        console.log(`Synced ${dest} -> ${destPath}`)
+    }))
 }
 
-buildSourceAndSyncFiles()
+buildSourceAndSyncFiles().catch(err => {
+    console.error(err)
+    process.exit(1)
+})

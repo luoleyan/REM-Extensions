@@ -24,7 +24,28 @@ export async function onReady() {
     if (generation !== loadGeneration) return
     loop = setupLoop()
 
-    modules.AudioPlayer.on('loadedContent', tryRequestLyrics)
+    loadedContentHandler = tryRequestLyrics
+    modules.AudioPlayer.on('loadedContent', loadedContentHandler)
+}
+
+let stopVsync = null
+let loadedContentHandler = null
+
+/**
+ * @type {UIExports.OnUnload}
+ */
+export function onUnload() {
+    stopVsync?.cancel()
+    stopVsync = null
+
+    if (loadedContentHandler && modules?.AudioPlayer?.off) {
+        modules.AudioPlayer.off('loadedContent', loadedContentHandler)
+    }
+    loadedContentHandler = null
+
+    if (div.isConnected) {
+        div.remove()
+    }
 }
 
 export function onUnload() {
