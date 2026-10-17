@@ -1,6 +1,6 @@
 {
     "name": "桌面歌词",
-    "ver": "1.0.0",
+    "ver": "1.0.1",
     "desc": "将歌词显示在桌面上",
     "author": "RGB",
     "entry": "index.js",
@@ -17,6 +17,19 @@
     "windows": {
         "desktop-lyrics": {
             "openDevTools": false,
+            "openOptions": {
+                "width": 720,
+                "height": 240,
+                "alwaysOnTop": true,
+                "frame": false,
+                "transparent": true,
+                "backgroundColor": "#00000000",
+                "hasShadow": false,
+                "maximizable": false,
+                "minimizable": false,
+                "skipTaskbar": true,
+                "resizable": false
+            },
             "main": "./main.js",
             "renderer": "./renderer/index.html"
         }

@@ -2,23 +2,37 @@
  * @type {UIModules}
  */
 let modules
+let loop
+let loadGeneration = 0
 
 /**
  * @type {UIExports.OnLoad}
  */
 export function onLoad(m) {
     modules = m
+    loadGeneration++
 }
 
 /**
  * @type {UIExports.OnReady}
  */
 export async function onReady() {
-    addCustomUI()
+    const generation = loadGeneration
+    await addCustomUI(generation)
+    if (generation !== loadGeneration) return
     await tryRequestLyrics()
-    setupLoop()
+    if (generation !== loadGeneration) return
+    loop = setupLoop()
 
     modules.AudioPlayer.on('loadedContent', tryRequestLyrics)
+}
+
+export function onUnload() {
+    loadGeneration++
+    loop?.cancel()
+    loop = null
+    modules.AudioPlayer.em.off('loadedContent', tryRequestLyrics)
+    div.remove()
 }
 
 let currentLyricsBody = null
@@ -93,11 +107,13 @@ const topBottom = document.createElement('div')
 
 let attachBottom = true
 
-async function addCustomUI() {
+async function addCustomUI(generation) {
     const {
         currentFontSize,
         nextFontSize,
     } = await modules.settings.get()
+    if (generation !== loadGeneration) return
+    attachBottom = true
 
     div.style.cssText = `
     box-sizing: border-box;
@@ -155,13 +171,13 @@ async function addCustomUI() {
     topBottom.classList.add('Row', 'new-icon', 'btn', 'text')
     topBottom.innerText = '\ue5d8'
 
-    div.addEventListener('mouseenter', () => {
+    div.onmouseenter = () => {
         topBottom.style.opacity = 1
-    })
-    div.addEventListener('mouseleave', () => {
+    }
+    div.onmouseleave = () => {
         topBottom.style.opacity = 0
-    })
-    topBottom.addEventListener('click', () => {
+    }
+    topBottom.onclick = () => {
         if (attachBottom) {
             div.style.bottom = ''
             div.style.top = '92px'
@@ -172,7 +188,7 @@ async function addCustomUI() {
 
         attachBottom = !attachBottom
         topBottom.innerText = attachBottom ? '\ue5d8' : '\ue5db'
-    })
+    }
 
     div.appendChild(currentEle)
     div.appendChild(nextEle)

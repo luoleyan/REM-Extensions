@@ -1,5 +1,5 @@
 import { Provider } from 'extension/protocol/common/provider'
-import { songEncoderDecoder } from 'extension/protocol/common/song'
+import { songEncodeDecoder } from 'extension/protocol/common/struct/audioTrack'
 import { registerProvider } from 'extension/protocol/node/provider'
 import { ProviderDescritpor } from 'extension/protocol/common/provider'
 
@@ -14,7 +14,7 @@ class SongProvider implements Provider {
         return Buffer.alloc(0)
     }
     async write(uri: string, value: Buffer): Promise<void> {
-        console.log('write', uri, songEncoderDecoder.decode(new Uint8Array(value.buffer)))
+        console.log('write', uri, songEncodeDecoder.decode(value))
     }
     async delete(uri: string): Promise<void> {
         console.log('delete', uri)

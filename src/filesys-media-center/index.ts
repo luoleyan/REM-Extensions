@@ -3,9 +3,8 @@ import { ProviderDescritpor } from 'extension/protocol/common/provider'
 import { lookup, unregisterProvider } from 'extension/protocol/node/provider'
 
 const providerDescritpor: ProviderDescritpor = {
-    category: 'provider.songs',
+    category: 'provider.song',
     name: 'fsMediaCenter.songs',
-    pipeName: 'fsMediaCenter.songs',
 }
 
 function notify(message: unknown) {
@@ -32,7 +31,7 @@ whenReady(async () => {
     })
 })
 
-provide('beforeDisable', () => {
-    threads.killThread('songs')
-    unregisterProvider(providerDescritpor)
+provide('beforeDisable', async () => {
+    await threads.killThread('songs')
+    await unregisterProvider(providerDescritpor)
 })

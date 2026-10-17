@@ -3,5 +3,7 @@
     "lyrics",
     "player-kernal",
     "desktop-lyrics",
-    "filesys-media-center"
+    "filesys-media-center",
+    "notification",
+    "hello-world"
 ]

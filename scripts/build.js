@@ -5,7 +5,12 @@ async function build() {
     await buildSource(false)
     const plugins = await getPlugins()
 
-    plugins.forEach(tar)
+    await Promise.all(plugins.map(tar))
 }
 
 build()
+    .then(() => process.exit(0))
+    .catch(error => {
+        console.error(error)
+        process.exit(1)
+    })

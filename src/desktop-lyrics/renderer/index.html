@@ -1,72 +1,1239 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; font-src 'self' data:;">
     <title>lyrics</title>
+    <link rel="stylesheet" href="../../@lib/symbols/round/index.css">
 </head>
 <body>
     <style>
-        body {
-            -webkit-app-region: drag;
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            background-color: transparent;
+        }
+
+        * {
             box-sizing: border-box;
-            width: 100vw;
-            height: 100vh;
+        }
+
+        body {
+            -webkit-app-region: no-drag;
+            box-sizing: border-box;
+            width: 100%;
+            height: 100%;
             margin: 0;
             padding: 0;
             overflow: hidden;
             display: flex;
             flex-direction: column;
-            justify-content: space-between;
+            justify-content: flex-end;
             align-items: center;
         }
 
-        body.unlock {
-            background-color: rgba(0, 0, 0, 0.5);
+        .lyrics-window {
+            position: relative;
+            width: calc(100% - 36px);
+            max-height: 100%;
+            min-width: 0;
+            padding: 48px 20px 12px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 2px;
+            border-radius: 10px;
+            user-select: none;
+            transition: background-color 0.16s ease, width 0.16s ease;
+        }
+
+        .lyrics-window.lyrics-refreshing .lrc,
+        .lyrics-window.lyrics-refreshing .supplementary,
+        .lyrics-window.lyrics-stale .lrc,
+        .lyrics-window.lyrics-stale .supplementary {
+            opacity: calc(var(--lyrics-opacity, 1) * .58);
+            transition: opacity .16s ease;
+        }
+
+        .timing-mode {
+            position: absolute;
+            top: 44px;
+            right: 20px;
+            padding: 2px 7px;
+            border: 1px solid rgba(255,255,255,.22);
+            border-radius: 10px;
+            color: rgba(255,255,255,.72);
+            background: rgba(22,26,34,.5);
+            font-size: .68em;
+            line-height: 1.35;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .16s ease;
+        }
+
+        body.lyrics-hover .timing-mode,
+        .timing-mode:focus-visible {
+            opacity: 1;
+        }
+
+        .status {
+            position: absolute;
+            top: 50%;
+            left: 20px;
+            right: 20px;
+            z-index: 1;
+            width: auto;
+            color: rgba(255, 255, 255, .78);
+            font-size: .9em;
+            line-height: 1.4;
+            text-align: center;
+            text-shadow: 0 1px 2px #000;
+            transform: translateY(-50%);
+        }
+
+        .status[data-mode="refreshing"],
+        .status[data-mode="error"] {
+            top: 8px;
+            transform: none;
+            color: rgba(255, 255, 255, .7);
+            font-size: .72em;
+            text-shadow: 0 1px 2px #000;
+        }
+
+        .status[hidden],
+        .status button[hidden] {
+            display: none;
+        }
+
+        body.unlock .lyrics-window {
+            cursor: move;
+            touch-action: none;
+        }
+
+        .lrc.lyric-enter {
+            animation: lyric-enter .24s ease-out both;
+        }
+
+        @keyframes lyric-enter {
+            from {
+                opacity: calc(var(--lyrics-opacity, 1) * .35);
+                transform: translateY(5px);
+            }
+
+            to {
+                opacity: var(--lyrics-opacity, 1);
+                transform: translateY(0);
+            }
+        }
+
+        .lrc,
+        .supplementary {
+            opacity: var(--lyrics-opacity, 1);
         }
 
         .lrc {
+            position: relative;
+            width: 100%;
+            flex: 0 0 auto;
             color: aquamarine;
             font-weight: normal;
             font-size: 24px;
             -webkit-text-stroke: 0.5px #fff;
             filter: drop-shadow(0 0 2px #000);
-            text-wrap: nowrap;
+            white-space: normal;
+            overflow-wrap: anywhere;
+            word-break: normal;
+            text-align: center;
+            line-height: 1.35;
             transition: 0.16s ease-in-out;
-            width: calc-size(fit-content, size);
-            height: calc-size(fit-content, size);
+            min-width: 0;
+            max-width: 100%;
+        }
+
+        /* Exact YRC lines get a stage-light treatment; uniform LRC fallback keeps the quiet base fill. */
+        .lrc[data-timing="exact"] {
+            filter: drop-shadow(0 0 2px #000) drop-shadow(0 0 4px var(--word-fill-color, gold));
+        }
+
+        .lrc[data-timing="exact"]::after {
+            content: "";
+            position: absolute;
+            left: 22%;
+            right: 22%;
+            bottom: .02em;
+            height: .16em;
+            border-radius: 999px;
+            background: linear-gradient(90deg,
+                transparent,
+                var(--word-fill-color, gold) 35%,
+                var(--word-rest-color, aquamarine) 65%,
+                transparent);
+            filter: blur(7px);
+            opacity: .3;
+            pointer-events: none;
+            animation: exact-line-aura 2.4s ease-in-out infinite;
+        }
+
+        @keyframes exact-line-aura {
+            0%, 100% { transform: scaleX(.84); opacity: .18; }
+            50% { transform: scaleX(1); opacity: .38; }
         }
 
         .focus {
             color: gold;
-            scale: 1.1;
         }
 
-        .container {
-            user-select: none;
+        .supplementary {
+            width: 100%;
+            min-width: 0;
+            color: rgba(255, 255, 255, .92);
+            font-size: .75em;
+            line-height: 1.45;
+            text-align: center;
+            white-space: normal;
+            overflow-wrap: anywhere;
+            filter: drop-shadow(0 1px 2px #000);
+            display: -webkit-box;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 3;
+            overflow: hidden;
+        }
+
+        .supplementary-token {
+            display: inline-block;
+            max-width: 100%;
+            white-space: normal;
+            overflow-wrap: anywhere;
+            vertical-align: baseline;
+        }
+
+        .supplementary[hidden] {
+            display: none;
+        }
+
+        .word,
+        .supplementary-word {
+            position: relative;
+            display: inline-block;
+            max-width: 100%;
+            color: transparent;
+            white-space: break-spaces;
+            -webkit-text-stroke: 0;
+            isolation: isolate;
+            background-image: linear-gradient(90deg,
+                var(--word-fill-color, gold) 0 var(--word-progress, 0%),
+                var(--word-rest-color, rgba(255,255,255,.42)) var(--word-progress, 0%) 100%);
+            background-repeat: no-repeat;
+            background-size: 100% 100%;
+            -webkit-background-clip: text;
+            background-clip: text;
+        }
+
+        .lrc[data-timing="exact"] .word {
+            padding-inline: .025em;
+            transition: filter .12s ease, text-shadow .12s ease, transform .12s ease;
+            background-image: linear-gradient(90deg,
+                var(--word-fill-color, gold) 0 calc(var(--word-progress, 0%) - 1.8%),
+                rgba(255, 255, 255, .98) calc(var(--word-progress, 0%) - 1.8%) var(--word-progress, 0%),
+                var(--word-rest-color, rgba(255,255,255,.42)) var(--word-progress, 0%) 100%);
+        }
+
+        .lrc[data-timing="exact"] .word::before,
+        .lrc[data-timing="exact"] .word::after {
+            content: "";
+            position: absolute;
+            pointer-events: none;
+        }
+
+        /* A fine underline makes the per-word timing visible even on bright backgrounds. */
+        .lrc[data-timing="exact"] .word::before {
+            left: .08em;
+            right: .08em;
+            bottom: .05em;
+            height: .075em;
+            border-radius: 999px;
+            background: linear-gradient(90deg,
+                var(--word-fill-color, gold) 0 var(--word-progress, 0%),
+                transparent var(--word-progress, 0%) 100%);
+            box-shadow: 0 0 .42em var(--word-fill-color, gold);
+            opacity: .82;
+            transform-origin: left center;
+        }
+
+        /* The bright bead follows the exact current character; uniform fallback never shows it. */
+        .lrc[data-timing="exact"] .word[data-progress="partial"]::after {
+            top: 50%;
+            left: var(--word-progress, 0%);
+            width: .42em;
+            height: .42em;
+            border-radius: 50%;
+            background: radial-gradient(circle,
+                rgba(255,255,255,.98) 0 10%,
+                var(--word-fill-color, gold) 30%,
+                transparent 72%);
+            filter: blur(.25px) drop-shadow(0 0 .34em var(--word-fill-color, gold));
+            opacity: .96;
+            transform: translate(-50%, -50%) scale(.8);
+            animation: exact-word-spark .72s ease-in-out infinite alternate;
+        }
+
+        .lrc[data-timing="exact"] .word[data-progress="complete"] {
+            text-shadow: 0 0 .18em var(--word-fill-color, gold),
+                0 0 .52em rgba(255, 215, 0, .28);
+            filter: saturate(1.12);
+        }
+
+        .lrc[data-timing="exact"] .word[data-progress="pending"] {
+            filter: saturate(.78) brightness(.92);
+        }
+
+        @keyframes exact-word-spark {
+            from { opacity: .62; transform: translate(-50%, -50%) scale(.68); }
+            to { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
+        }
+
+        .lyrics-window.lyrics-shadow-off .lrc,
+        .lyrics-window.lyrics-shadow-off .supplementary,
+        .lyrics-window.lyrics-shadow-off .word[data-progress="complete"] {
+            filter: none;
+            text-shadow: none;
+        }
+
+        .lyrics-window.lyrics-shadow-off .lrc[data-timing="exact"]::after {
+            opacity: 0;
+        }
+
+        .lyrics-window.lyrics-shadow-off .lrc[data-timing="exact"] .word::before {
+            box-shadow: none;
+        }
+
+        .lyrics-window.lyrics-shadow-off .lrc[data-timing="exact"] .word[data-progress="partial"]::after {
+            filter: none;
+        }
+
+        .controls {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            display: flex;
+            gap: 4px;
+            padding: 3px;
+            border: 1px solid rgba(255,255,255,.28);
+            border-radius: 20px;
+            background: rgba(22, 26, 34, .78);
+            opacity: 0;
+            transform: translate(-50%, 4px);
+            transition: opacity .16s ease, transform .16s ease;
+            -webkit-app-region: no-drag;
+            pointer-events: none;
+            cursor: default;
+        }
+
+        body.unlock .lyrics-window:hover .controls,
+        body.lyrics-hover .controls,
+        .controls:has(:focus-visible) {
+            opacity: 1;
+            transform: translate(-50%, 0);
+            pointer-events: auto;
+        }
+
+        .controls button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            border: 0;
+            border-radius: 50%;
+            color: #fff;
+            background: transparent;
+            cursor: pointer;
+        }
+
+        .controls .icon-round {
+            font-size: 22px;
+            pointer-events: none;
+        }
+
+        .controls button:hover {
+            background: rgba(255,255,255,.2);
+        }
+
+        .controls button:active {
+            transform: scale(.92);
+        }
+
+        .controls button:disabled {
+            opacity: .45;
+            cursor: wait;
+        }
+
+        .controls button[aria-pressed="true"] {
+            color: #7fffd4;
+            background: rgba(127,255,212,.12);
+        }
+
+        .controls button[aria-expanded="true"] {
+            color: #7fffd4;
+            background: rgba(127,255,212,.12);
+        }
+
+        .controls button:focus-visible {
+            outline: 2px solid #7fffd4;
+            outline-offset: 1px;
+        }
+
+        .controls .close {
+            color: #ff8e8e;
+        }
+
+        .settings-panel {
+            position: fixed;
+            top: 12px;
+            right: 18px;
+            bottom: 12px;
+            z-index: 8;
             display: flex;
             flex-direction: column;
-            justify-content: center;
-            width: calc-size(fit-content, size);
-            height: calc-size(fit-content, size);
-            transition: all 1s ease;
+            gap: 0;
+            width: min(400px, calc(100vw - 36px));
+            min-height: 0;
+            max-height: min(540px, calc(100vh - 24px));
+            max-height: min(540px, calc(100dvh - 24px));
+            padding: 0;
+            overflow-x: hidden;
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            border: 1px solid rgba(188, 205, 220, .2);
+            border-radius: 18px;
+            color: rgba(255,255,255,.92);
+            background: rgba(16, 22, 29, .985);
+            box-shadow: 0 20px 56px rgba(0,0,0,.52), 0 0 0 1px rgba(0,0,0,.22);
+            backdrop-filter: blur(18px) saturate(1.15);
+            font-size: 13px;
+            -webkit-app-region: no-drag;
+            pointer-events: auto;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(127,255,212,.42) transparent;
         }
 
-        .panel {
-            background-color: rgba(0, 0, 0, 0.4);
+        .settings-panel[hidden] {
+            display: none !important;
+        }
+
+        .settings-header {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            min-height: 58px;
+            padding: 12px 14px 10px;
+            border-bottom: 1px solid rgba(188, 205, 220, .12);
+            background: rgba(16, 22, 29, .985);
+        }
+
+        .settings-title {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            color: #fff;
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: .01em;
+        }
+
+        .settings-title .icon-round {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            border-radius: 9px;
+            color: #071413;
+            background: #7fffd4;
+            font-size: 17px;
+        }
+
+        .settings-dismiss {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            border: 0;
+            border-radius: 10px;
+            color: rgba(255,255,255,.68);
+            background: transparent;
+            cursor: pointer;
+        }
+
+        .settings-dismiss:hover {
+            color: #fff;
+            background: rgba(255,255,255,.12);
+        }
+
+        .settings-tabs {
+            position: sticky;
+            top: 58px;
+            z-index: 2;
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 4px;
+            padding: 8px 10px;
+            border-bottom: 1px solid rgba(188, 205, 220, .1);
+            background: rgba(16, 22, 29, .985);
+        }
+
+        .settings-tab {
+            min-width: 0;
+            min-height: 32px;
+            padding: 0 7px;
+            border: 1px solid transparent;
+            border-radius: 9px;
+            color: rgba(218, 229, 237, .56);
+            background: transparent;
+            cursor: pointer;
+            font: inherit;
+            font-size: 11px;
+            font-weight: 650;
+            letter-spacing: .02em;
+            transition: color .16s ease, background .16s ease, border-color .16s ease;
+        }
+
+        .settings-tab:hover {
+            color: rgba(255,255,255,.88);
+            background: rgba(255,255,255,.06);
+        }
+
+        .settings-tab[aria-selected="true"] {
+            color: #071413;
+            border-color: rgba(127,255,212,.7);
+            background: #7fffd4;
+            box-shadow: 0 5px 14px rgba(127,255,212,.13);
+        }
+
+        .settings-section[hidden] {
+            display: none !important;
+        }
+
+        .settings-section {
+            display: grid;
+            gap: 8px;
+            padding: 14px 14px 0;
+        }
+
+        .settings-section.settings-presets {
+            gap: 9px;
+        }
+
+        .settings-section:last-of-type {
+            padding-bottom: 14px;
+        }
+
+        .settings-preset-heading {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .settings-preset-count {
+            color: rgba(255,255,255,.38);
+            font: 10px ui-monospace, SFMono-Regular, Consolas, monospace;
+        }
+
+        .settings-preset-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 7px;
+        }
+
+        .settings-preset {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr);
+            align-items: center;
+            gap: 8px;
+            min-height: 52px;
+            padding: 8px 9px;
+            border: 1px solid rgba(188, 205, 220, .16);
+            border-radius: 11px;
+            color: rgba(255,255,255,.78);
+            background: rgba(255,255,255,.045);
+            cursor: pointer;
+            font: inherit;
+            text-align: left;
+            transition: border-color .16s ease, background .16s ease, transform .16s ease;
+        }
+
+        .settings-preset:hover {
+            border-color: rgba(127,255,212,.46);
+            background: rgba(127,255,212,.08);
+            transform: translateY(-1px);
+            box-shadow: 0 8px 18px rgba(0,0,0,.16);
+        }
+
+        .settings-preset[aria-pressed="true"] {
+            border-color: rgba(127,255,212,.82);
+            background: rgba(127,255,212,.13);
+            color: #fff;
+            box-shadow: inset 0 0 0 1px rgba(127,255,212,.14);
+        }
+
+        .settings-preset-swatches {
+            display: flex;
+            width: 30px;
+            height: 30px;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,.22);
+            border-radius: 9px;
+            transform: rotate(-8deg);
+        }
+
+        .settings-preset-swatches i {
+            flex: 1 1 50%;
+        }
+
+        .settings-preset-copy {
+            display: grid;
+            gap: 2px;
+            min-width: 0;
+        }
+
+        .settings-preset-copy strong {
+            overflow: hidden;
+            color: inherit;
+            font-size: 12px;
+            font-weight: 650;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .settings-preset-copy small {
+            overflow: hidden;
+            color: rgba(255,255,255,.46);
+            font-size: 10px;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .settings-custom-preset {
+            position: relative;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 28px;
+            gap: 4px;
+            min-width: 0;
+        }
+
+        .settings-custom-preset-apply {
+            width: 100%;
+            min-width: 0;
+        }
+
+        .settings-custom-preset-delete {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            min-width: 28px;
+            height: 28px;
+            align-self: center;
+            padding: 0;
+            border: 1px solid rgba(255,255,255,.14);
+            border-radius: 8px;
+            color: rgba(255,255,255,.46);
+            background: rgba(255,255,255,.04);
+            cursor: pointer;
+        }
+
+        .settings-custom-preset-delete:hover {
+            color: #ffb2b2;
+            border-color: rgba(255,142,142,.55);
+            background: rgba(255,142,142,.12);
+        }
+
+        .settings-custom-preset-delete .icon-round {
+            font-size: 17px;
+        }
+
+        .settings-custom-empty {
+            grid-column: 1 / -1;
+            padding: 9px 2px;
+            color: rgba(255,255,255,.42);
+            font-size: 11px;
+            line-height: 1.4;
+        }
+
+        .settings-preset-create {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 6px;
+        }
+
+        .settings-preset-create input {
+            width: 100%;
+            min-width: 0;
+            height: 32px;
+            padding: 4px 9px;
+            border: 1px solid rgba(255,255,255,.2);
+            border-radius: 8px;
+            outline: none;
+            color: #fff;
+            background: rgba(255,255,255,.08);
+            font: inherit;
+        }
+
+        .settings-preset-create input::placeholder {
+            color: rgba(255,255,255,.36);
+        }
+
+        .settings-preset-create input:focus-visible {
+            outline: 2px solid #7fffd4;
+            outline-offset: 1px;
+        }
+
+        .settings-preset-create button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            min-width: 116px;
+            height: 32px;
+            padding: 0 9px;
+            border: 1px solid rgba(127,255,212,.38);
+            border-radius: 8px;
+            color: #bfffee;
+            background: rgba(127,255,212,.1);
+            cursor: pointer;
+            font: inherit;
+        }
+
+        .settings-preset-create button:hover {
+            border-color: rgba(127,255,212,.7);
+            background: rgba(127,255,212,.18);
+        }
+
+        .settings-preset-create button .icon-round {
+            font-size: 17px;
+        }
+
+        .settings-section-label {
+            color: rgba(255,255,255,.52);
+            font-size: 11px;
+            font-weight: 650;
+            letter-spacing: .04em;
+            text-transform: uppercase;
+        }
+
+        .settings-field,
+        .settings-toggle {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 8px;
+            min-height: 40px;
+            color: rgba(255,255,255,.84);
+            font-size: 13px;
+        }
+
+        .settings-field > span:first-child,
+        .settings-toggle > span:first-child {
+            min-width: 0;
+        }
+
+        .settings-field input[type="text"],
+        .settings-field input[type="number"] {
+            width: 154px;
+            min-width: 0;
+            height: 34px;
+            padding: 4px 9px;
+            border: 1px solid rgba(255,255,255,.2);
+            border-radius: 9px;
+            outline: none;
+            color: #fff;
+            background: rgba(255,255,255,.08);
+            font: inherit;
+        }
+
+        .settings-input-wrap {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            min-width: 0;
+        }
+
+        .settings-input-wrap input {
+            flex: 1 1 auto;
+        }
+
+        .settings-color-control {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+        }
+
+        .settings-color-control input[type="color"] {
+            width: 38px;
+            height: 34px;
+            padding: 2px;
+            border: 1px solid rgba(255,255,255,.22);
+            border-radius: 9px;
+            background: rgba(255,255,255,.08);
+            cursor: pointer;
+        }
+
+        .settings-color-value {
+            min-width: 74px;
+            color: rgba(255,255,255,.58);
+            font: 11px ui-monospace, SFMono-Regular, Consolas, monospace;
+            text-align: right;
+        }
+
+        .settings-range {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 42px;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .settings-range input[type="range"] {
+            width: 100%;
+            accent-color: #7fffd4;
+            cursor: pointer;
+        }
+
+        .settings-range output {
+            color: rgba(255,255,255,.6);
+            font: 11px ui-monospace, SFMono-Regular, Consolas, monospace;
+            text-align: right;
+        }
+
+        .settings-color-preview {
+            flex: 0 0 auto;
+            width: 22px;
+            height: 22px;
+            border: 1px solid rgba(255,255,255,.38);
+            border-radius: 6px;
+            background: transparent;
+            box-shadow: inset 0 0 0 1px rgba(0,0,0,.24);
+        }
+
+        .settings-field input:focus-visible,
+        .settings-toggle input:focus-visible,
+        .settings-actions button:focus-visible {
+            outline: 2px solid #7fffd4;
+            outline-offset: 1px;
+        }
+
+        .settings-number {
+            display: grid;
+            grid-template-columns: 28px 62px 28px;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .settings-number button,
+        .settings-actions button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 28px;
+            height: 28px;
+            padding: 0 7px;
+            border: 1px solid rgba(255,255,255,.2);
+            border-radius: 8px;
+            color: #fff;
+            background: rgba(255,255,255,.08);
+            cursor: pointer;
+            font: inherit;
+        }
+
+        .settings-number button:hover,
+        .settings-actions button:hover {
+            background: rgba(255,255,255,.18);
+        }
+
+        .settings-number input[type="number"] {
+            width: 62px;
+            text-align: center;
+        }
+
+        .settings-toggle {
+            grid-template-columns: minmax(0, 1fr) auto;
+        }
+
+        .settings-toggle input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            margin: 0;
+            accent-color: #7fffd4;
+            cursor: pointer;
+        }
+
+        .settings-details {
+            border: 1px solid rgba(188, 205, 220, .1);
+            border-radius: 10px;
+            padding: 0 9px;
+            background: rgba(255,255,255,.025);
+        }
+
+        .settings-details summary {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            min-height: 34px;
+            color: rgba(255,255,255,.68);
+            cursor: pointer;
+            font-size: 11px;
+            list-style: none;
+        }
+
+        .settings-details summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .settings-details summary::after {
+            content: '⌄';
+            color: rgba(255,255,255,.44);
+            font-size: 15px;
+            transition: transform .16s ease;
+        }
+
+        .settings-details[open] summary::after {
+            transform: rotate(180deg);
+        }
+
+        .settings-details-content {
+            display: grid;
+            gap: 8px;
+            padding: 0 0 9px;
+        }
+
+        .settings-font-tools {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .settings-font-tools select,
+        .settings-font-tools button {
+            min-width: 0;
+            height: 32px;
+            border: 1px solid rgba(255,255,255,.2);
+            border-radius: 8px;
+            color: #fff;
+            background: rgba(255,255,255,.08);
+            font: inherit;
+        }
+
+        .settings-font-tools select {
+            padding: 0 8px;
+        }
+
+        .settings-font-tools button {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 0 9px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .settings-font-tools button:hover {
+            background: rgba(127,255,212,.12);
+        }
+
+        .settings-actions-secondary {
+            justify-self: start;
+            min-height: 28px;
+            padding: 0 8px;
+            border: 1px solid rgba(255,255,255,.16);
+            border-radius: 7px;
+            color: rgba(255,255,255,.62);
+            background: rgba(255,255,255,.05);
+            cursor: pointer;
+            font: inherit;
+            font-size: 11px;
+        }
+
+        .settings-actions-secondary:hover {
+            color: #fff;
+            background: rgba(255,255,255,.12);
+        }
+
+        .settings-font-meta {
+            overflow: hidden;
+            color: rgba(255,255,255,.48);
+            font-size: 10px;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .settings-actions {
+            position: sticky;
+            bottom: 0;
+            z-index: 2;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            justify-content: flex-end;
+            padding: 10px 14px 12px;
+            border-top: 1px solid rgba(188, 205, 220, .13);
+            background: rgba(16, 22, 29, .985);
+        }
+
+        .settings-save-status {
+            flex: 1 1 auto;
+            min-width: 0;
+            color: rgba(255,255,255,.48);
+            font-size: 11px;
+        }
+
+        .settings-save-status[data-state="saving"] {
+            color: #7fffd4;
+        }
+
+        .settings-save-status[data-state="error"] {
+            color: #ff9b9b;
+        }
+
+        .settings-actions button[data-action="reset"] {
+            color: rgba(255,255,255,.72);
+        }
+
+        .lyrics-window.settings-open .controls {
+            opacity: 1;
+            transform: translate(-50%, 0);
+            pointer-events: auto;
+        }
+
+        @media (max-width: 560px) {
+            .settings-panel {
+                right: 12px;
+                left: 12px;
+                width: auto;
+            }
+
+            .settings-preset-grid {
+                grid-template-columns: 1fr;
+            }
         }
 
         .no-pointer {
             pointer-events: none;
         }
 
-        .container > :last-child {
-            align-self: flex-end;
+        .status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            flex-wrap: wrap;
         }
+
+        .status button {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            min-height: 28px;
+            padding: 2px 9px;
+            border: 1px solid rgba(255,255,255,.35);
+            border-radius: 14px;
+            color: #fff;
+            background: rgba(22, 26, 34, .78);
+            cursor: pointer;
+        }
+
+        .status button:hover {
+            background: rgba(255,255,255,.2);
+        }
+
+        .status button:disabled {
+            opacity: .45;
+            cursor: wait;
+        }
+
+        /* The display rules above intentionally style status as flex; hidden must win over them. */
+        .status[hidden],
+        .status button[hidden] {
+            display: none !important;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                animation-duration: .01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: .01ms !important;
+            }
+        }
+
     </style>
-    <div class="container" id="container">
+    <div class="lyrics-window" id="lyrics-window">
+        <nav class="controls" aria-label="桌面歌词操作">
+            <button id="previous" aria-label="上一首" title="上一首"><span class="icon-round" aria-hidden="true">skip_previous</span></button>
+            <button id="play-pause" aria-label="播放或暂停" title="播放或暂停"><span class="icon-round" aria-hidden="true">pause</span></button>
+            <button id="next" aria-label="下一首" title="下一首"><span class="icon-round" aria-hidden="true">skip_next</span></button>
+            <button id="toggle-translation" aria-label="隐藏歌词翻译" title="隐藏歌词翻译" aria-pressed="true"><span class="icon-round" aria-hidden="true">translate</span></button>
+            <button id="toggle-romanization" aria-label="隐藏歌词音译（罗马音）" title="隐藏歌词音译（罗马音）" aria-pressed="true"><span class="icon-round" aria-hidden="true">record_voice_over</span></button>
+            <button id="lock" aria-label="锁定歌词" title="锁定歌词"><span class="icon-round" aria-hidden="true">lock_open</span></button>
+            <button id="settings" aria-label="打开歌词设置" title="打开歌词设置" aria-expanded="false" aria-controls="settings-panel"><span class="icon-round" aria-hidden="true">settings</span></button>
+            <button id="close" class="close" aria-label="关闭桌面歌词" title="关闭桌面歌词"><span class="icon-round" aria-hidden="true">close</span></button>
+        </nav>
+        <section class="settings-panel" id="settings-panel" aria-label="歌词设置" hidden>
+            <div class="settings-header">
+                <div class="settings-title"><span class="icon-round" aria-hidden="true">tune</span><span>歌词设置</span></div>
+                <button type="button" class="settings-dismiss" id="settings-dismiss" aria-label="关闭歌词设置" title="关闭歌词设置"><span class="icon-round" aria-hidden="true">close</span></button>
+            </div>
+            <nav class="settings-tabs" aria-label="歌词设置分区" role="tablist">
+                <button type="button" class="settings-tab" data-settings-tab="theme" role="tab" aria-selected="true" aria-controls="settings-section-theme">主题</button>
+                <button type="button" class="settings-tab" data-settings-tab="display" role="tab" aria-selected="false" aria-controls="settings-section-display" tabindex="-1">显示</button>
+                <button type="button" class="settings-tab" data-settings-tab="color" role="tab" aria-selected="false" aria-controls="settings-section-color" tabindex="-1">颜色</button>
+                <button type="button" class="settings-tab" data-settings-tab="font" role="tab" aria-selected="false" aria-controls="settings-section-font" tabindex="-1">字体</button>
+            </nav>
+            <div class="settings-section settings-presets" id="settings-section-theme" data-settings-section="theme" role="tabpanel" tabindex="0">
+                <div class="settings-preset-heading">
+                    <div class="settings-section-label">系统主题</div>
+                    <span class="settings-preset-count">内置</span>
+                </div>
+                <div class="settings-preset-grid" role="group" aria-label="歌词风格预设">
+                    <button type="button" class="settings-preset" data-preset="aurora" aria-pressed="false">
+                        <span class="settings-preset-swatches" aria-hidden="true"><i></i><i></i></span>
+                        <span class="settings-preset-copy"><strong>极光</strong><small>清透冷色 · 现代感</small></span>
+                    </button>
+                    <button type="button" class="settings-preset" data-preset="sunset" aria-pressed="false">
+                        <span class="settings-preset-swatches" aria-hidden="true"><i></i><i></i></span>
+                        <span class="settings-preset-copy"><strong>暮光</strong><small>暖金高亮 · 舞台感</small></span>
+                    </button>
+                    <button type="button" class="settings-preset" data-preset="mono" aria-pressed="false">
+                        <span class="settings-preset-swatches" aria-hidden="true"><i></i><i></i></span>
+                        <span class="settings-preset-copy"><strong>银幕</strong><small>黑白对比 · 极简</small></span>
+                    </button>
+                    <button type="button" class="settings-preset" data-preset="violet" aria-pressed="false">
+                        <span class="settings-preset-swatches" aria-hidden="true"><i></i><i></i></span>
+                        <span class="settings-preset-copy"><strong>霓虹</strong><small>高饱和色 · 夜间氛围</small></span>
+                    </button>
+                </div>
+                <div class="settings-preset-heading">
+                    <div class="settings-section-label">我的主题</div>
+                    <span class="settings-preset-count">最多 12 个</span>
+                </div>
+                <div class="settings-preset-grid" id="settings-custom-presets" role="group" aria-label="我的歌词主题">
+                    <div class="settings-custom-empty">还没有自定义主题，调整好样式后即可保存。</div>
+                </div>
+                <div class="settings-preset-create">
+                    <input id="settings-preset-name" type="text" maxlength="24" autocomplete="off" placeholder="输入主题名称，例如：我的夜间歌词" aria-label="自定义主题名称">
+                    <button type="button" id="settings-save-preset" title="保存当前歌词样式为主题"><span class="icon-round" aria-hidden="true">bookmark_add</span>保存当前样式</button>
+                </div>
+            </div>
+            <div class="settings-section" id="settings-section-display" data-settings-section="display" role="tabpanel" tabindex="0" hidden>
+                <div class="settings-section-label">显示</div>
+                <label class="settings-field" for="settings-font-size">
+                    <span>字体大小</span>
+                    <span class="settings-number">
+                        <button type="button" id="settings-font-size-decrease" aria-label="减小字体大小">−</button>
+                        <input id="settings-font-size" type="number" min="12" max="72" step="1" inputmode="numeric" aria-label="字体大小，12 到 72 像素">
+                        <button type="button" id="settings-font-size-increase" aria-label="增大字体大小">＋</button>
+                    </span>
+                </label>
+                <label class="settings-field" for="settings-lyrics-opacity">
+                    <span>歌词透明度</span>
+                    <span class="settings-range">
+                        <input id="settings-lyrics-opacity" type="range" min="20" max="100" step="1" aria-label="歌词透明度">
+                        <output id="settings-lyrics-opacity-value">100%</output>
+                    </span>
+                </label>
+            </div>
+            <div class="settings-section" id="settings-section-color" data-settings-section="color" role="tabpanel" tabindex="0" hidden>
+                <div class="settings-section-label">颜色</div>
+                <label class="settings-field" for="settings-highlight-picker">
+                    <span>高亮颜色</span>
+                    <span class="settings-color-control">
+                        <input id="settings-highlight-picker" type="color" aria-label="选择高亮颜色">
+                        <output class="settings-color-value" id="settings-highlight-value">gold</output>
+                    </span>
+                </label>
+                <label class="settings-field" for="settings-next-picker">
+                    <span>未播放颜色</span>
+                    <span class="settings-color-control">
+                        <input id="settings-next-picker" type="color" aria-label="选择未播放颜色">
+                        <output class="settings-color-value" id="settings-next-value">aquamarine</output>
+                    </span>
+                </label>
+                <label class="settings-field" for="settings-background-picker">
+                    <span>歌词底色</span>
+                    <span class="settings-color-control">
+                        <input id="settings-background-picker" type="color" aria-label="选择歌词底色">
+                        <output class="settings-color-value" id="settings-background-value">透明</output>
+                    </span>
+                </label>
+                <label class="settings-field" for="settings-background-opacity">
+                    <span>底色透明度</span>
+                    <span class="settings-range">
+                        <input id="settings-background-opacity" type="range" min="0" max="100" step="1" aria-label="歌词底色透明度">
+                        <output id="settings-background-opacity-value">0%</output>
+                    </span>
+                </label>
+                <details class="settings-details">
+                    <summary>更多颜色设置 · 支持 CSS 颜色值</summary>
+                    <div class="settings-details-content">
+                        <label class="settings-field" for="settings-highlight-color"><span>高亮颜色值</span><input id="settings-highlight-color" type="text" spellcheck="false" autocomplete="off" placeholder="gold"></label>
+                        <label class="settings-field" for="settings-next-color"><span>未播放颜色值</span><input id="settings-next-color" type="text" spellcheck="false" autocomplete="off" placeholder="aquamarine"></label>
+                        <label class="settings-field" for="settings-background-color"><span>底色 CSS 值</span><input id="settings-background-color" type="text" spellcheck="false" autocomplete="off" placeholder="transparent"></label>
+                    </div>
+                </details>
+            </div>
+            <div class="settings-section" id="settings-section-font" data-settings-section="font" role="tabpanel" tabindex="0" hidden>
+                <div class="settings-section-label">字体与效果</div>
+                <div class="settings-font-tools">
+                    <select id="settings-font-preset" aria-label="字体预设">
+                        <option value="system-ui">系统默认</option>
+                        <option value="Microsoft YaHei">微软雅黑</option>
+                        <option value="Segoe UI">Segoe UI</option>
+                        <option value="Georgia">Georgia</option>
+                        <option value="Consolas">Consolas</option>
+                    </select>
+                    <button type="button" id="settings-font-import"><span class="icon-round" aria-hidden="true">upload_file</span>导入字体</button>
+                </div>
+                <div class="settings-font-meta" id="settings-font-meta">使用系统字体</div>
+                <details class="settings-details">
+                    <summary>字体详细编辑</summary>
+                    <div class="settings-details-content">
+                        <label class="settings-field" for="settings-font-family"><span>字体名称 / CSS 栈</span><input id="settings-font-family" type="text" spellcheck="false" autocomplete="off" placeholder="system-ui"></label>
+                        <button type="button" class="settings-actions-secondary" id="settings-font-clear" hidden>移除导入字体</button>
+                    </div>
+                </details>
+                <label class="settings-toggle" for="settings-text-shadow">
+                    <span>歌词阴影</span>
+                    <input id="settings-text-shadow" type="checkbox">
+                </label>
+            </div>
+            <div class="settings-actions">
+                <span class="settings-save-status" id="settings-save-status" aria-live="polite" data-state="saved">已保存</span>
+                <button type="button" data-action="reset">恢复默认</button>
+                <button type="button" data-action="close">完成</button>
+            </div>
+        </section>
+        <span class="timing-mode" id="timing-mode" aria-live="polite" hidden></span>
+        <div class="status" id="status" aria-live="polite" hidden>
+            <span id="status-message"></span>
+            <button id="retry" type="button" title="重新加载歌词" hidden>
+                <span class="icon-round" aria-hidden="true">refresh</span>
+                <span>重试</span>
+            </button>
+        </div>
         <div class="lrc" id="top"></div>
+        <div class="supplementary" id="romanization" aria-label="当前句音译" hidden></div>
+        <div class="supplementary" id="translation" aria-label="当前句翻译" hidden></div>
         <div class="lrc" id="bottom"></div>
     </div>
     <script src="./index.ts"></script>

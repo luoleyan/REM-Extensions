@@ -4,10 +4,12 @@ import { RtAudio, RtAudioFormat } from 'audify'
 let pcmReciever: Socket | null = null
 let audio: RtAudio = new RtAudio()
 let renderBuffer: Buffer[] = []
+let pendingPcm = Buffer.alloc(0)
 
 const sampleRate = 48000
 const channels = 2
 const bufferSize = 4096
+const frameBytes = bufferSize * channels * 4
 
 async function createAudio() {
     if (audio) {
@@ -16,7 +18,8 @@ async function createAudio() {
     }
 
     const { label } = await output.device()
-    const device = audio?.getDevices().find(({ name }) => name === label)
+    const deviceLabel = label.replace(/ \([0-9a-f]{4}:[0-9a-f]{4}\)$/i, '')
+    const device = audio.getDevices().find(({ name }) => name === deviceLabel)
 
     if (!device) {
         return
@@ -43,7 +46,6 @@ async function createAudio() {
 
     audio.setFrameOutputCallback(() => {
         const buffer = renderBuffer.shift()
-        console.log(performance.now())
 
         buffer
             ? audio.write(buffer)
@@ -57,7 +59,12 @@ async function createAudio() {
 whenReady(async () => {
     pcmReciever = ipc.registerPcmStreamReceiver(buffer => {
         if (audio.isStreamRunning()) {
-            renderBuffer.push(buffer)
+            // The pipe can split or combine writes; RtAudio requires complete PCM frames.
+            pendingPcm = Buffer.concat([pendingPcm, buffer])
+            while (pendingPcm.length >= frameBytes) {
+                renderBuffer.push(pendingPcm.subarray(0, frameBytes))
+                pendingPcm = pendingPcm.subarray(frameBytes)
+            }
         }
     })
 
